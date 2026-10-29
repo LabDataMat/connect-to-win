@@ -27,6 +27,16 @@ export class DailyChallengeManager {
     return dayMs - (now % dayMs);
   }
 
+  /** 日期键加减天数（按日历天，不涉及时区换算） */
+  static addDays(dateKey: string, days: number): string {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    if (!y || !m || !d) return dateKey;
+    const t = Date.UTC(y, m - 1, d) + days * 86400000;
+    const dt = new Date(t);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  }
+
   getForDate(dateKey: string): LevelData {
     const cached = this.cache.get(dateKey);
     if (cached) return cached;

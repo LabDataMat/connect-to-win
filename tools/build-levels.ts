@@ -67,6 +67,7 @@ function build(): LevelData[] {
   let prevPath = 0;
   let prevCost = 0;
   let prevArea = 0;
+  let prevMin = 0;
 
   for (let i = 0; i < PLANS.length; i++) {
     const plan = PLANS[i];
@@ -102,6 +103,9 @@ function build(): LevelData[] {
       const sol = OptimalSolver.solve(level);
       if (!sol.solved) continue;
       if (sol.minSteps < check.solutionCost * 0.72) continue; // 捷径过多，换种子
+      // 难度曲线：最优步数不应明显回退，单关增幅也要受控
+      if (sol.minSteps < prevMin - 1) continue;
+      if (sol.minSteps > prevMin + 6) continue;
       level.minSteps = sol.minSteps;
       level.stepLimit = sol.minSteps + plan.slack;
 
@@ -114,6 +118,7 @@ function build(): LevelData[] {
     prevPath = chosen.pathLength;
     prevCost = chosen.cost;
     prevArea = area;
+    prevMin = chosen.minSteps;
     levels.push(chosen.level);
     console.log(
       `L${String(id).padStart(2, '0')} ${plan.w}x${plan.h} 路径${chosen.pathLength} 参考${chosen.cost} 最优${chosen.minSteps} 上限${chosen.level.stepLimit} 干扰${plan.decoys} ${plan.name}`

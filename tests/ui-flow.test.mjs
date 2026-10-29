@@ -273,11 +273,14 @@ test('布局：常见屏幕尺寸下按钮不越界、不重叠', () => {
     assert.ok(board.w > 0 && board.h > 0, '棋盘应有尺寸');
     assert.ok(board.x >= 0 && board.x + board.w <= 750, '棋盘水平越界');
     assert.ok(board.y >= 0 && board.y + board.h <= h, '棋盘垂直越界');
-    const b1 = app.ui.find('btn.retry');
-    const b2 = app.ui.find('btn.hint');
-    const b3 = app.ui.find('btn.pause');
-    assert.ok(b1.rect.x + b1.rect.w < b2.rect.x, '底部按钮重叠');
-    assert.ok(b2.rect.x + b2.rect.w < b3.rect.x, '底部按钮重叠');
+    const bottoms = ['btn.undo', 'btn.hint', 'btn.retry', 'btn.pause']
+      .map((id) => app.ui.find(id))
+      .filter(Boolean)
+      .sort((a, b) => a.rect.x - b.rect.x);
+    assert.equal(bottoms.length, 4, '底部应有撤销/提示/重试/暂停四个按钮');
+    for (let i = 1; i < bottoms.length; i++) {
+      assert.ok(bottoms[i - 1].rect.x + bottoms[i - 1].rect.w < bottoms[i].rect.x, '底部按钮重叠');
+    }
 
     tapId(app, platform, 'btn.pause');
     check('pause-modal');

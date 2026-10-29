@@ -2,12 +2,21 @@ import { BoardManager } from './BoardManager';
 import { PathValidator } from './PathValidator';
 import type { GameStatus, LevelData } from './types';
 
-export type GameEventType = 'rotate' | 'win' | 'lose' | 'reset' | 'blocked';
+export type GameEventType = 'rotate' | 'win' | 'lose' | 'reset' | 'blocked' | 'undo';
 export interface GameEvent {
   type: GameEventType;
   x?: number;
   y?: number;
   moves?: number;
+}
+
+/** 一步操作的回退信息 */
+export interface UndoEntry {
+  x: number;
+  y: number;
+  prevRotation: number;
+  prevSwitchOn: boolean;
+  wasSwitch: boolean;
 }
 
 export interface RotateResult {
@@ -29,6 +38,10 @@ export class GameManager {
   private _status: GameStatus = 'playing';
   private _hintsUsed = 0;
   private _extraSteps = 0;
+  /** 每关可撤销次数上限 */
+  static readonly MAX_UNDO = 3;
+  private _undosLeft = GameManager.MAX_UNDO;
+  private _history: UndoEntry[] = [];
   private listeners: ((e: GameEvent) => void)[] = [];
 
   constructor(level: LevelData) {
@@ -98,6 +111,15 @@ export class GameManager {
       return { ok: false, changed: false, won: false, lost: false, reason: 'empty' };
     }
 
+    // 先记录回退信息，再修改
+    const entry: UndoEntry = {
+      x,
+      y,
+      prevRotation: tile.rotation,
+      prevSwitchOn: tile.switchOn,
+      wasSwitch: tile.kind === 'switch',
+    };
+
     if (tile.kind === 'switch') {
       this.board.toggleAt(x, y);
     } else {
@@ -107,6 +129,9 @@ export class GameManager {
         return { ok: false, changed: false, won: false, lost: false, reason: outcome.reason };
       }
     }
+
+    this._history.push(entry);
+    if (this._history.length > 128) this._history.shift();
 
     this._moves += 1;
     this.emit({ type: 'rotate', x, y, moves: this._moves });
@@ -130,7 +155,38 @@ export class GameManager {
     this.board.reset();
     this._moves = 0;
     this._status = 'playing';
+    this._history = [];
+    this._undosLeft = GameManager.MAX_UNDO;
     this.emit({ type: 'reset' });
+  }
+
+  get undosLeft(): number {
+    return this._undosLeft;
+  }
+
+  get canUndo(): boolean {
+    return this._status === 'playing' && this._undosLeft > 0 && this._history.length > 0;
+  }
+
+  /**
+   * 撤销上一步：回退方块状态并返还 1 步。
+   * 每关最多 MAX_UNDO 次，避免「无限试错」让三星失去意义。
+   */
+  undo(): boolean {
+    if (!this.canUndo) return false;
+    const entry = this._history.pop();
+    if (!entry) return false;
+    const tile = this.board.tileAt(entry.x, entry.y);
+    if (!tile) return false;
+
+    if (entry.wasSwitch) tile.switchOn = entry.prevSwitchOn;
+    else tile.rotation = entry.prevRotation;
+
+    this._moves = Math.max(0, this._moves - 1);
+    this._undosLeft -= 1;
+    this._status = 'playing';
+    this.emit({ type: 'undo', x: entry.x, y: entry.y, moves: this._moves });
+    return true;
   }
 
   /** 使用一次提示（免费，不依赖广告） */

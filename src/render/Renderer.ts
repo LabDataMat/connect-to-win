@@ -48,6 +48,8 @@ export class CanvasRenderer {
   private particles: Particle[] = [];
   private flow: { path: Point[]; start: number; duration: number; reachedGoal: boolean } | null = null;
   private flash: { start: number } | null = null;
+  /** 当前渲染的关卡标识，切换关卡时用它清空所有瞬时状态 */
+  private levelKey = '';
   private lastNow = 0;
   private bgCache: { h: number; grad: CanvasGradient } | null = null;
 
@@ -65,6 +67,16 @@ export class CanvasRenderer {
 
     const dt = this.lastNow === 0 ? 16 : Math.min(64, now - this.lastNow);
     this.lastNow = now;
+
+    // 切换关卡/模式时清空动画、粒子、电流与闪光，避免残留到新棋盘上
+    const key = view.level ? `${view.level.id}|${view.level.dateKey ?? ''}` : '';
+    if (key !== this.levelKey) {
+      this.levelKey = key;
+      this.anims.clear();
+      this.particles.length = 0;
+      this.flow = null;
+      this.flash = null;
+    }
 
     // 宽屏时内容居中，左右留白由背景与暗化层填充
     const k = vp.scale * s.dpr;

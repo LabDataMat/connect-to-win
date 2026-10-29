@@ -14,7 +14,17 @@ export interface DailyResult {
   date: string;
   cleared: boolean;
   steps: number;
+  stars?: number;
 }
+
+/** 每日挑战历史记录（只保留最近若干天） */
+export interface DailyRecord {
+  date: string;
+  steps: number;
+  stars: number;
+}
+
+export const DAILY_HISTORY_LIMIT = 30;
 
 export interface GameSettings {
   sound: boolean;
@@ -33,6 +43,12 @@ export interface SaveData {
   highestUnlocked: number;
   levels: Record<string, LevelProgress>;
   daily: DailyResult | null;
+  /** 当前连续完成天数 */
+  dailyStreak: number;
+  /** 历史最长连续天数 */
+  bestDailyStreak: number;
+  /** 最近若干天的成绩（按日期倒序） */
+  dailyHistory: DailyRecord[];
   settings: GameSettings;
   stats: GameStats;
   lastLevel: number;
@@ -50,6 +66,9 @@ export function defaultSave(): SaveData {
     highestUnlocked: 1,
     levels: {},
     daily: null,
+    dailyStreak: 0,
+    bestDailyStreak: 0,
+    dailyHistory: [],
     settings: { sound: true },
     stats: { totalMoves: 0, totalClears: 0, hintsUsed: 0, playSeconds: 0, sessions: 0 },
     lastLevel: 1,
@@ -155,6 +174,26 @@ export class SaveManager {
       }
     }
 
+    d.dailyStreak = toInt(input.dailyStreak, 0, 0, 9999);
+    d.bestDailyStreak = toInt(input.bestDailyStreak, d.dailyStreak, 0, 9999);
+
+    if (Array.isArray(input.dailyHistory)) {
+      const seen = new Set<string>();
+      for (const item of input.dailyHistory) {
+        if (!isObject(item)) continue;
+        const date = typeof item.date === 'string' ? item.date : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || seen.has(date)) continue;
+        seen.add(date);
+        d.dailyHistory.push({
+          date,
+          steps: toInt(item.steps, 0, 0, 99999),
+          stars: toInt(item.stars, 1, 0, 3),
+        });
+        if (d.dailyHistory.length >= DAILY_HISTORY_LIMIT) break;
+      }
+      d.dailyHistory.sort((a, b) => (a.date < b.date ? 1 : -1));
+    }
+
     if (isObject(input.settings)) {
       d.settings.sound = input.settings.sound !== false;
     }
@@ -234,16 +273,62 @@ export class SaveManager {
     return Object.values(this._data.levels).reduce((sum, l) => sum + (l.stars || 0), 0);
   }
 
-  recordDailyResult(dateKey: string, cleared: boolean, steps: number): void {
+  /**
+   * 记录每日挑战结果，并维护连续天数与历史。
+   * - 同一天多次挑战：保留更好成绩，连续天数不重复累加
+   * - 隔天完成：连续 +1；中断后重新从 1 开始
+   */
+  recordDailyResult(dateKey: string, cleared: boolean, steps: number, stars = 1): void {
     const prev = this._data.daily;
-    if (prev && prev.date === dateKey) {
-      // 同一天多次挑战：保留最好成绩
-      if (cleared && (!prev.cleared || steps < prev.steps)) {
-        this._data.daily = { date: dateKey, cleared: true, steps };
+    const sameDay = prev !== null && prev.date === dateKey;
+
+    if (sameDay) {
+      if (cleared && (!prev!.cleared || steps < prev!.steps)) {
+        this._data.daily = { date: dateKey, cleared: true, steps, stars };
       }
-      return;
+    } else {
+      this._data.daily = { date: dateKey, cleared, steps, stars };
     }
-    this._data.daily = { date: dateKey, cleared, steps };
+
+    if (!cleared) return;
+
+    // 连续天数：仅当这一天是「昨天之后的第一天」时才累加
+    if (!sameDay) {
+      const yesterday = this.addDays(dateKey, -1);
+      this._data.dailyStreak = prev && prev.cleared && prev.date === yesterday ? this._data.dailyStreak + 1 : 1;
+    } else if (this._data.dailyStreak === 0) {
+      this._data.dailyStreak = 1;
+    }
+    this._data.bestDailyStreak = Math.max(this._data.bestDailyStreak, this._data.dailyStreak);
+
+    // 历史：按日期去重、保留更好成绩、最多 DAILY_HISTORY_LIMIT 条
+    const idx = this._data.dailyHistory.findIndex((r) => r.date === dateKey);
+    const record: DailyRecord = { date: dateKey, steps, stars };
+    if (idx >= 0) {
+      const old = this._data.dailyHistory[idx];
+      if (steps < old.steps) this._data.dailyHistory[idx] = record;
+      else if (stars > old.stars) this._data.dailyHistory[idx] = { ...old, stars };
+    } else {
+      this._data.dailyHistory.push(record);
+    }
+    this._data.dailyHistory.sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (this._data.dailyHistory.length > DAILY_HISTORY_LIMIT) {
+      this._data.dailyHistory.length = DAILY_HISTORY_LIMIT;
+    }
+  }
+
+  /** 日期加减（与 DailyChallengeManager.addDays 同算法，避免 core 层互相依赖） */
+  private addDays(dateKey: string, days: number): string {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    if (!y || !m || !d) return dateKey;
+    const t = Date.UTC(y, m - 1, d) + days * 86400000;
+    const dt = new Date(t);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  }
+
+  get dailyStreak(): number {
+    return this._data.dailyStreak;
   }
 
   setSound(on: boolean): void {

@@ -80,6 +80,11 @@ for (let i = 1; i < levels.length; i++) {
   if (costs[i] + 2 < costs[i - 1]) {
     console.log(`  ! 关卡 ${cur.id} 参考解步数(${costs[i]}) 低于上一关(${costs[i - 1]})，请确认难度曲线`);
   }
+  // 最优步数是玩家真实感受到的难度，回退或暴涨都算难度跳跃
+  const prevOpt = OptimalSolver.solve(prev).minSteps;
+  const curOpt = OptimalSolver.solve(cur).minSteps;
+  if (curOpt < prevOpt - 1) fail(`关卡 ${cur.id} 最优步数 ${curOpt} 明显低于上一关 ${prevOpt}（难度回退）`);
+  if (curOpt > prevOpt + 6) fail(`关卡 ${cur.id} 最优步数 ${curOpt} 比上一关 ${prevOpt} 高出 6 步以上（难度跳跃）`);
 }
 console.log('  已检查 30 关的尺寸、路径长度与步数成本');
 

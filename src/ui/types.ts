@@ -16,6 +16,7 @@ export type Action =
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'retry' }
+  | { type: 'undo' }
   | { type: 'hint' }
   | { type: 'next' }
   | { type: 'replay' }

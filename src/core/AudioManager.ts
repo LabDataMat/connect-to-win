@@ -33,7 +33,7 @@ export interface AudioContextLike {
   resume?(): Promise<void>;
 }
 
-export type SoundName = 'tap' | 'rotate' | 'win' | 'lose' | 'hint' | 'unlock';
+export type SoundName = 'tap' | 'rotate' | 'win' | 'lose' | 'hint' | 'unlock' | 'undo';
 
 interface NoteSpec {
   freq: number;
@@ -59,6 +59,10 @@ const SOUNDS: Record<SoundName, NoteSpec[]> = {
     { freq: 659.25, dur: 0.12, type: 'sine', gain: 0.16, delay: 0.1 },
     { freq: 783.99, dur: 0.16, type: 'sine', gain: 0.16, delay: 0.2 },
     { freq: 1046.5, dur: 0.22, type: 'sine', gain: 0.14, delay: 0.32 },
+  ],
+  undo: [
+    { freq: 520, dur: 0.06, type: 'triangle', gain: 0.13, delay: 0 },
+    { freq: 380, dur: 0.08, type: 'triangle', gain: 0.11, delay: 0.05 },
   ],
   lose: [
     { freq: 300, dur: 0.14, type: 'sawtooth', gain: 0.12, delay: 0 },

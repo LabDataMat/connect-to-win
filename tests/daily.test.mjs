@@ -106,3 +106,79 @@ test('存档中的每日结果字段非法时被安全丢弃', () => {
   save.load();
   assert.equal(save.data.daily, null);
 });
+
+test('连续天数：隔天完成累加，中断后重置', () => {
+  const save = new SaveManager(new MemoryStorage());
+  save.load();
+  assert.equal(save.dailyStreak, 0);
+
+  save.recordDailyResult('2026-10-27', true, 12, 2);
+  assert.equal(save.dailyStreak, 1);
+
+  save.recordDailyResult('2026-10-28', true, 11, 3);
+  assert.equal(save.dailyStreak, 2, '连续第二天应累加');
+
+  save.recordDailyResult('2026-10-29', true, 10, 3);
+  assert.equal(save.dailyStreak, 3);
+
+  // 中断一天后再完成，连续重新从 1 开始
+  save.recordDailyResult('2026-10-31', true, 9, 1);
+  assert.equal(save.dailyStreak, 1, '断档后应重置为 1');
+  assert.equal(save.data.bestDailyStreak, 3, '历史最长连续应保留');
+});
+
+test('连续天数：同一天重复挑战不会重复累加', () => {
+  const save = new SaveManager(new MemoryStorage());
+  save.load();
+  save.recordDailyResult('2026-10-29', true, 15, 2);
+  assert.equal(save.dailyStreak, 1);
+  save.recordDailyResult('2026-10-29', true, 12, 3);
+  assert.equal(save.dailyStreak, 1, '同一天不应重复累加');
+  assert.equal(save.data.daily.steps, 12, '保留更好成绩');
+  assert.equal(save.data.daily.stars, 3);
+});
+
+test('历史记录：按日期去重、保留最近 30 天', () => {
+  const save = new SaveManager(new MemoryStorage());
+  save.load();
+  for (let i = 0; i < 35; i++) {
+    const day = String(i + 1).padStart(2, '0');
+    save.recordDailyResult(`2026-01-${day}`, true, 10 + i, 2);
+  }
+  assert.equal(save.data.dailyHistory.length, 30, '历史最多 30 条');
+  assert.equal(save.data.dailyHistory[0].date, '2026-01-35', '按日期倒序，最新的在最前');
+
+  // 同一天重复记录不新增条目
+  save.recordDailyResult('2026-01-35', true, 8, 3);
+  assert.equal(save.data.dailyHistory.length, 30);
+  assert.equal(save.data.dailyHistory[0].steps, 8);
+});
+
+test('旧存档没有连续天数与历史字段时安全兼容', () => {
+  const raw = {
+    version: 1,
+    highestUnlocked: 1,
+    levels: {},
+    daily: { date: '2026-10-29', cleared: true, steps: 12 },
+    settings: { sound: true },
+    stats: {},
+    lastLevel: 1,
+  };
+  const save = new SaveManager(new MemoryStorage({ [SAVE_KEY]: JSON.stringify(raw) }));
+  save.load();
+  assert.equal(save.dailyStreak, 0);
+  assert.deepEqual(save.data.dailyHistory, []);
+  assert.equal(save.data.daily.steps, 12);
+});
+
+test('每日挑战端到端：完成后连续天数与历史都会更新', () => {
+  const { app, platform, save } = makeApp();
+  tapId(app, platform, 'btn.daily');
+  solveCurrentLevel(app, platform);
+  assert.equal(app.game.status, 'won');
+
+  const key = app.level.dateKey;
+  assert.equal(save.dailyStreak, 1);
+  assert.equal(save.data.dailyHistory[0].date, key);
+  assert.equal(save.data.dailyHistory[0].stars, app.win.stars);
+});

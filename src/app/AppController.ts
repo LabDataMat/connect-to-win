@@ -279,6 +279,9 @@ export class AppController {
       case 'retry':
         this.retry();
         break;
+      case 'undo':
+        this.undo();
+        break;
       case 'hint':
         this.showHint();
         break;
@@ -344,6 +347,7 @@ export class AppController {
   }
 
   startLevel(level: LevelData, daily: boolean): void {
+    this.cancelPress();
     this.level = level;
     this.dailyMode = daily;
     this.game = new GameManager(level);
@@ -368,6 +372,7 @@ export class AppController {
   }
 
   private leaveGame(target: Screen): void {
+    this.cancelPress();
     if (this.screen === 'game' && this.game) {
       this.deps.analytics.log('level_leave', { id: this.level?.id ?? 0, moves: this.game.moves });
       this.save.save();
@@ -432,7 +437,7 @@ export class AppController {
 
     if (this.dailyMode) {
       const key = DailyChallengeManager.dateKeyOf();
-      this.save.recordDailyResult(key, true, steps);
+      this.save.recordDailyResult(key, true, steps, stars);
       summary = {
         levelId: 0,
         steps,
@@ -517,6 +522,23 @@ export class AppController {
     this.bump();
     this.deps.audio.play('tap');
     this.deps.analytics.log('level_retry', { id: this.level?.id ?? 0 });
+  }
+
+  /** 撤销上一步（每关有限次数，返还步数） */
+  private undo(): void {
+    const game = this.game;
+    if (!game || this.screen !== 'game' || this.modal !== null) return;
+    const before = game.moves;
+    if (!game.undo()) {
+      this.toast('没有可撤销的操作');
+      return;
+    }
+    this.deps.audio.play('undo');
+    this.platform.vibrate('light');
+    this.deps.analytics.log('level_undo', { id: this.level?.id ?? 0, moves: game.moves, left: game.undosLeft });
+    this.pushFlowEffect();
+    this.bump();
+    void before;
   }
 
   private pause(): void {

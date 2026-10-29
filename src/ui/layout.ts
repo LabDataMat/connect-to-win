@@ -90,8 +90,14 @@ function buildHome(view: ViewState, env: LayoutEnv): UIElement[] {
   }));
 
   const dailyDone = view.dailyDone;
+  const streak = view.save.dailyStreak ?? 0;
+  const dailyLabel = dailyDone
+    ? '每日挑战（今日已完成）'
+    : streak > 0
+      ? `每日挑战 · 连续 ${streak} 天`
+      : '每日挑战';
   els.push(
-    button('btn.daily', dailyDone ? '每日挑战（今日已完成）' : '每日挑战', centerX(480), playY + 146, 480, 100, { type: 'openDaily' }, 'ghost', {
+    button('btn.daily', dailyLabel, centerX(480), playY + 146, 480, 100, { type: 'openDaily' }, 'ghost', {
       fontSize: THEME.font.body,
     })
   );
@@ -200,10 +206,10 @@ function buildGame(view: ViewState, env: LayoutEnv): LayoutResult {
     }
   }
 
-  const btnW = 200;
+  const btnW = 158;
   const btnH = 92;
-  const gap = 34;
-  const totalW = btnW * 3 + gap * 2;
+  const gap = 14;
+  const totalW = btnW * 4 + gap * 3;
   const startX = (750 - totalW) / 2;
   const barY = h - safeBottom - 138;
   if (level.id <= 3) {
@@ -214,9 +220,16 @@ function buildGame(view: ViewState, env: LayoutEnv): LayoutResult {
     );
   }
 
-  els.push(button('btn.retry', '重试', startX, barY, btnW, btnH, { type: 'retry' }, 'ghost', { fontSize: THEME.font.body }));
-  els.push(button('btn.hint', '提示', startX + btnW + gap, barY, btnW, btnH, { type: 'hint' }, 'ghost', { fontSize: THEME.font.body }));
-  els.push(button('btn.pause', '暂停', startX + (btnW + gap) * 2, barY, btnW, btnH, { type: 'pause' }, 'ghost', { fontSize: THEME.font.body }));
+  const undoLeft = game.undosLeft;
+  els.push(
+    button('btn.undo', `撤销 ${undoLeft}`, startX, barY, btnW, btnH, { type: 'undo' }, 'ghost', {
+      fontSize: THEME.font.small,
+      disabled: !game.canUndo,
+    })
+  );
+  els.push(button('btn.hint', '提示', startX + btnW + gap, barY, btnW, btnH, { type: 'hint' }, 'ghost', { fontSize: THEME.font.small }));
+  els.push(button('btn.retry', '重试', startX + (btnW + gap) * 2, barY, btnW, btnH, { type: 'retry' }, 'ghost', { fontSize: THEME.font.small }));
+  els.push(button('btn.pause', '暂停', startX + (btnW + gap) * 3, barY, btnW, btnH, { type: 'pause' }, 'ghost', { fontSize: THEME.font.small }));
 
   return { elements: els, board };
 }
@@ -334,7 +347,9 @@ function buildModal(view: ViewState, env: LayoutEnv): UIElement[] {
       ...text(
         'modal.best',
         win
-          ? `${win.newStars ? '新纪录！' : '最佳'} ${win.best ?? win.steps} 步${win.unlockedNext ? ' · 已解锁下一关' : ''}`
+          ? win.daily
+            ? `连续完成 ${view.save.dailyStreak ?? 1} 天`
+            : `${win.newStars ? '新纪录！' : '最佳'} ${win.best ?? win.steps} 步${win.unlockedNext ? ' · 已解锁下一关' : ''}`
           : '',
         panelRect.x,
         panelRect.y + 228,
