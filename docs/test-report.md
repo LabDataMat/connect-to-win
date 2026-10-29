@@ -12,17 +12,17 @@
 | 检查项 | 命令 | 结果 |
 | --- | --- | --- |
 | TypeScript 类型检查 | `npm run typecheck` | ✅ 0 error（`strict` + `noUnusedLocals` + `noUnusedParameters`） |
-| 自动化测试 | `npm test` | ✅ 54 / 54 通过，0 失败 |
+| 自动化测试 | `npm test` | ✅ 57 / 57 通过，0 失败 |
 | 关卡合法性校验 | `npm run validate` | ✅ 30 关全部通过，负例全部被检出 |
-| 构建 | `npm run build` | ✅ Web 75.0 KB / 微信包 76.8 KB（主包上限 4 MB） |
-| 浏览器真实渲染 | 无头 Chrome 截图 | ✅ 手机竖屏 8 张 + 桌面宽屏 4 张 |
+| 构建 | `npm run build` | ✅ Web 86.9 KB / 微信包 88.8 KB（主包上限 4 MB） |
+| 浏览器真实渲染 | 无头 Chrome 截图 | ✅ 手机竖屏 8 张 + 桌面宽屏 4 张 + 关卡/旋转 5 张 |
 
 ```
 # npm test 输出结尾
-1..54
-# tests 54
+1..57
+# tests 57
 # suites 0
-# pass 54
+# pass 57
 # fail 0
 # cancelled 0
 # skipped 0
@@ -52,9 +52,9 @@
 ```
 # npm run build 输出
 构建完成：
-  dist/web/index.html + game.js  75.0 KB
-  dist/wxgame/game.js            75.5 KB
-  dist/wxgame 合计               76.8 KB（微信小游戏主包上限 4 MB）
+  dist/web/index.html + game.js  86.9 KB
+  dist/wxgame/game.js            87.5 KB
+  dist/wxgame 合计               88.8 KB（微信小游戏主包上限 4 MB）
   ✓ 体积检查通过
 ```
 
@@ -117,7 +117,23 @@
 
 ---
 
-## 4. 持久化测试（`tests/persistence.test.mjs`，12 项）
+## 4. 渲染一致性测试（`tests/render.test.mjs`，3 项）
+
+用「记录型 canvas 上下文」把 `Renderer` 的绘制调用全部录下来（`translate` / `rotate` / `lineTo`），
+反算出每个方块**实际画出来的导线方向**，再与 `Tile.dirs`（逻辑方向）逐一比对。
+
+| 需求 | 测试用例 | 结果 |
+| --- | --- | --- |
+| 每种旋转角度的绘制方向 | 渲染方向与逻辑方向一致（rotation = 0/1/2/3） | ✅ |
+| 旋转后立即跟随 | 旋转一次后渲染立即跟随（不会滞后一格） | ✅ |
+| 起终点方向 | 起点与终点渲染方向与关卡数据一致 | ✅ |
+
+> 这组测试是为一个真实 bug 补的：`drawTile` 里已经用 `ctx.rotate(rotation × 90°)` 旋转了坐标系，
+> 却仍然遍历 `tile.dirs`（已含旋转），导致方向被转两次——玩家「看着转对了却不亮」。
+> 已把遍历对象改为 `tile.baseDirs`。把代码改回错误版本时该测试会失败（实测输出：
+> 「旋转 1 次时，(1,0) 画出的方向 2,8 与逻辑方向 1,4 不一致」），证明测试有效。
+
+## 5. 持久化测试（`tests/persistence.test.mjs`，12 项）
 
 | 需求 | 测试用例 | 结果 |
 | --- | --- | --- |
@@ -135,7 +151,7 @@
 
 ---
 
-## 5. 广告测试（`tests/ads.test.mjs`，9 项）
+## 6. 广告测试（`tests/ads.test.mjs`，9 项）
 
 | 需求 | 测试用例 | 结果 |
 | --- | --- | --- |
@@ -151,7 +167,7 @@
 
 ---
 
-## 6. 微信小游戏包冒烟测试（`tests/wx-smoke.test.mjs`，1 项）
+## 7. 微信小游戏包冒烟测试（`tests/wx-smoke.test.mjs`，1 项）
 
 用 Node 的 `vm` 模块构造一个最小的微信运行环境（模拟 `wx.createCanvas` / `getWindowInfo` / `onTouchStart` / `setStorageSync`，2D 上下文用桩对象），直接执行**构建产物** `dist/wxgame/game.js`：
 
@@ -166,7 +182,7 @@
 
 ---
 
-## 7. 真实浏览器渲染验证
+## 8. 真实浏览器渲染验证
 
 本机未安装 Playwright/agent-browser，改用系统自带的 Chrome（`--headless=new`）对 `dist/web` 做真实渲染截图，并通过 `web/qa.html` 注入**真实 `pointerdown` 事件**驱动流程（不是直接调用内部函数）。
 
@@ -184,6 +200,11 @@
 | `docs/screenshots/wide-game.png` | 桌面宽屏游戏页 | 棋盘与底部按钮全部在可视区 |
 | `docs/screenshots/wide-win.png` | 桌面宽屏通关弹窗 | 弹窗居中完整显示 |
 | `docs/screenshots/wide-1920.png` | 1920×1080 游戏页 | 极端宽屏下仍完整可见 |
+| `docs/screenshots/lv1.png` | 第 1 关 | 3×3 教学关，起点在右上、终点在左上 |
+| `docs/screenshots/lv8.png` | 第 8 关 | 5×5，起点在上方，含绝缘块 |
+| `docs/screenshots/lv15.png` | 第 15 关 | 6×6 近乎填满，起点左下、终点右侧 |
+| `docs/screenshots/lv30.png` | 第 30 关 | 8×8 满盘，48 步、上限 50 |
+| `docs/screenshots/rotate.png` | 旋转后 | 点一次后导线方向正确跟随 |
 
 截图过程中发现并修复的 3 个真实问题（记录在案）：
 
@@ -191,10 +212,13 @@
 2. 稀疏关卡的空白格不可见，网格结构看不懂 → 为空格绘制浅色凹槽。
 3. 关卡列表的锁图标与关卡数字/「未解锁」文案重叠 → 去掉图标，改用降亮样式 + 「未解锁」文案表达锁定。
 4. **桌面宽屏下界面溢出**（1280×800 时设计高度只剩 469，首页按钮被裁掉）→ 改为「按宽度与最小设计高度取较小缩放 + 居中留白」，并补充 10 种尺寸的布局测试与宽屏点击测试。
+5. **导线方向被旋转两次**（`ctx.rotate` + `tile.dirs` 双重旋转）→ 改用 `tile.baseDirs`，并补 3 项渲染一致性测试（见第 4 节）。
+6. **空格渲染成黑洞**，棋盘看起来缺块 → 改为带斜线纹理的绝缘块。
+7. **关卡太简单**：起终点固定左右两侧、干扰块稀疏、步数余量过大 → 起终点随机边缘、填充率提高到接近满盘、余量收紧到 +2 步，并重做 30 关。
 
 ---
 
-## 8. 未验证 / 无法验证的部分（如实说明）
+## 9. 未验证 / 无法验证的部分（如实说明）
 
 | 项目 | 原因 | 影响 |
 | --- | --- | --- |
@@ -208,7 +232,7 @@
 
 ---
 
-## 9. 如何复现
+## 10. 如何复现
 
 ```bash
 npm install

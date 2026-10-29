@@ -20,7 +20,7 @@
 | 2D 场景 / 节点 / 触摸 | 自研轻量 Canvas 2D 渲染层（`src/render/Renderer.ts`）+ 统一指针事件 |
 | 微信小游戏构建目标 | `npm run build` 直接产出 `dist/wxgame/`（`game.js` / `game.json` / `project.config.json`） |
 | 平台适配层 | `src/platform/`（Web / 微信双实现，业务层零平台判断） |
-| 包体 | 微信主包 **76.8 KB**（上限 4 MB） |
+| 包体 | 微信主包 **88.8 KB**（上限 4 MB） |
 | 运行依赖 | 0 个运行时依赖；素材全部为代码绘制矢量图形，无外部图片/音频 |
 
 这样做的代价与边界（已如实记录）：
@@ -38,7 +38,7 @@
 ```bash
 npm install            # 安装开发依赖（typescript + esbuild）
 npm run dev            # 构建并启动本地预览 http://127.0.0.1:5173
-npm test               # 构建 + 54 项自动化测试
+npm test               # 构建 + 57 项自动化测试
 npm run validate       # 独立关卡合法性校验程序
 npm run build          # 产出 Web 预览版与微信小游戏包
 ```
@@ -50,7 +50,7 @@ npm run build          # 产出 Web 预览版与微信小游戏包
 | `npm run typecheck` | TypeScript 类型检查（`tsc --noEmit`） |
 | `npm run levels` | 重新生成 30 个固定关卡到 `src/data/levels.json` |
 | `npm run validate` | 校验全部关卡的合法性、难度曲线、每日挑战可复现性 |
-| `npm test` | 构建 + 运行全部 54 项自动化测试 |
+| `npm test` | 构建 + 运行全部 57 项自动化测试 |
 | `npm run build` | 构建 `dist/web` 与 `dist/wxgame`，并做包体检查 |
 | `npm run dev` | 本地静态服务器（预览 `dist/web`） |
 
@@ -102,7 +102,7 @@ F:/AI-Game
 │  ├─ validate-levels.ts        独立关卡校验程序
 │  ├─ build.mjs                 Web + 微信小游戏构建，含包体检查
 │  └─ serve.mjs                 本地预览服务器
-├─ tests/                       54 项自动化测试（node:test）
+├─ tests/                       57 项自动化测试（node:test）
 ├─ web/index.html               浏览器预览页
 ├─ web/qa.html                  QA 场景页（截图/流程验收用）
 ├─ docs/
@@ -148,7 +148,7 @@ scale = min(屏幕宽 / 750, 屏幕高 / 1240)
 
 ## 6. 已实现功能
 
-- 30 个固定关卡，逐关解锁；关卡数据经独立校验程序验证（存在合法解、初始未通关、步数上限足够）。
+- 30 个固定关卡，逐关解锁；3×3 起步、后段到 8×8，步数余量从 +6 收紧到 +2；起点/终点随机落在任意一边，干扰块几乎填满棋盘。关卡数据经独立校验程序验证（存在合法解、初始未通关、步数上限足够）。
 - 每日挑战：以北京时间日期为种子确定性生成，同一日期所有玩家谜题一致；记录当天结果。
 - 完整流程界面：启动页 → 关卡列表 → 游戏页 → 暂停/通关/失败弹窗 → 设置页；返回、重试、下一关、继续全部可用。
 - 步数显示（当前 / 上限）、目标步数、最佳步数、通关反馈与解锁提示。
@@ -172,8 +172,8 @@ scale = min(屏幕宽 / 750, 屏幕高 / 1240)
 
 | 产物 | 路径 | 体积 |
 | --- | --- | --- |
-| 浏览器预览 | `dist/web/index.html` + `dist/web/game.js` | 75.0 KB |
-| 微信小游戏 | `dist/wxgame/game.js` / `game.json` / `project.config.json` | 76.8 KB（主包上限 4 MB） |
+| 浏览器预览 | `dist/web/index.html` + `dist/web/game.js` | 86.9 KB |
+| 微信小游戏 | `dist/wxgame/game.js` / `game.json` / `project.config.json` | 88.8 KB（主包上限 4 MB） |
 
 构建命令：`npm run build`。产物由 `tools/build.mjs` 生成，`project.config.json` 中 `appid` 为 `touristappid`（游客模式），正式提审前必须替换为自己的小游戏 AppID。
 

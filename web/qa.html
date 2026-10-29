@@ -43,6 +43,7 @@
       (function () {
         const params = new URLSearchParams(location.search);
         const scenario = params.get('s') || 'home';
+        const levelParam = Number(params.get('level') || 0);
         const label = document.getElementById('qa');
         label.textContent = 'QA: ' + scenario;
 
@@ -125,6 +126,26 @@
           },
           daily() {
             tapId('btn.daily');
+          },
+          level() {
+            const app = window.__CTW__.app;
+            app.save.data.highestUnlocked = 30;
+            app.dispatch({ type: 'selectLevel', id: levelParam || 1 });
+          },
+          rotate() {
+            const app = window.__CTW__.app;
+            app.save.data.highestUnlocked = 30;
+            app.dispatch({ type: 'selectLevel', id: levelParam || 1 });
+            setTimeout(() => {
+              const cells = app.ui.elements.filter((e) => e.kind === 'cell' && e.action);
+              for (const el of cells) {
+                const t = app.game.board.tileAt(el.action.x, el.action.y);
+                if (t && t.rotatable) {
+                  tapDesign(el.rect.x + el.rect.w / 2, el.rect.y + el.rect.h / 2);
+                  break;
+                }
+              }
+            }, 200);
           },
         };
 

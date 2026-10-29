@@ -1,6 +1,6 @@
 import { BoardManager } from './BoardManager';
 import { PathValidator } from './PathValidator';
-import { CellData, LevelData, Point, DIR_OPPOSITE, dirFromDelta, rotateMaskCW } from './types';
+import { CellData, LevelData, Point, Dir, DIR_OPPOSITE, DIR_VECTOR, dirFromDelta, rotateMaskCW } from './types';
 
 /** 确定性伪随机数生成器（mulberry32），保证同一种子结果完全一致 */
 export function mulberry32(seed: number): () => number {
@@ -63,14 +63,16 @@ function keyOf(p: Point): string {
 }
 
 /** 随机 DFS 在网格中寻找一条从 start 到 goal、长度在 [minLen, maxLen] 的简单路径。
- *  约束：第一步必须向东（起点在左边缘、开口朝右），最后一步必须由西侧进入终点，
- *  这样起点/终点的开口方向恒为“右/左”，视觉与规则都清晰。 */
+ *  约束：第一步沿起点开口方向离开，最后一步必须从终点开口方向进入，
+ *  保证起点/终点的开口始终朝向网格内部。 */
 export function carvePath(
   rng: () => number,
   width: number,
   height: number,
   start: Point,
   goal: Point,
+  startDir: Dir,
+  goalDir: Dir,
   minLen: number,
   maxLen: number
 ): Point[] | null {
@@ -78,21 +80,24 @@ export function carvePath(
   const path: Point[] = [{ ...start }];
   let budget = 120000;
 
-  // 第一步固定向东
-  const first: Point = { x: start.x + 1, y: start.y };
-  if (first.x >= width || first.x < 0) return null;
+  // 第一步沿起点开口方向
+  const sv = DIR_VECTOR[startDir];
+  const first: Point = { x: start.x + sv.dx, y: start.y + sv.dy };
+  if (first.x < 0 || first.y < 0 || first.x >= width || first.y >= height) return null;
   if (first.x === goal.x && first.y === goal.y && minLen > 2) return null;
   visited.add(keyOf(first));
   path.push(first);
+
+  const gv = DIR_VECTOR[goalDir];
 
   const dfs = (): boolean => {
     if (budget-- <= 0) return false;
     const cur = path[path.length - 1];
     if (cur.x === goal.x && cur.y === goal.y) {
       if (path.length < minLen) return false;
-      // 必须从西侧进入终点
+      // 必须从终点开口方向进入
       const prev = path[path.length - 2];
-      return prev !== undefined && prev.x === goal.x - 1 && prev.y === goal.y;
+      return prev !== undefined && prev.x === goal.x + gv.dx && prev.y === goal.y + gv.dy;
     }
     if (path.length >= maxLen) return false;
     for (const d of shuffle(NEIGHBOR_DELTAS, rng)) {
@@ -142,15 +147,27 @@ export function generateLevel(opts: GenOptions): LevelData {
     const rng = mulberry32(seed);
     const { width, height } = opts;
 
-    const startY = Math.floor(rng() * height);
-    let goalY = Math.floor(rng() * height);
-    if (height > 1 && goalY === startY) goalY = (goalY + 1 + Math.floor(rng() * (height - 1))) % height;
-    const start: Point = { x: 0, y: startY };
-    const goal: Point = { x: width - 1, y: goalY };
+    // 起点/终点随机落在四条边中的任意一条，开口朝向网格内部
+    const pickEndpoint = (): { p: Point; dir: Dir } => {
+      const edge = Math.floor(rng() * 4);
+      if (edge === 0) return { p: { x: 0, y: Math.floor(rng() * height) }, dir: 2 as Dir };
+      if (edge === 1) return { p: { x: width - 1, y: Math.floor(rng() * height) }, dir: 8 as Dir };
+      if (edge === 2) return { p: { x: Math.floor(rng() * width), y: 0 }, dir: 4 as Dir };
+      return { p: { x: Math.floor(rng() * width), y: height - 1 }, dir: 1 as Dir };
+    };
+
+    const s1 = pickEndpoint();
+    let s2 = pickEndpoint();
+    let guard = 0;
+    while (guard++ < 12 && s2.p.x === s1.p.x && s2.p.y === s1.p.y) s2 = pickEndpoint();
+    const start = s1.p;
+    const goal = s2.p;
+    const startDir = s1.dir;
+    const goalDir = s2.dir;
 
     const maxPath = Math.min(opts.maxPath, width * height - 1);
     const minPath = Math.min(opts.minPath, maxPath);
-    const path = carvePath(rng, width, height, start, goal, minPath, maxPath);
+    const path = carvePath(rng, width, height, start, goal, startDir, goalDir, minPath, maxPath);
     if (!path) continue;
 
     const cells: (CellData | null)[] = new Array(width * height).fill(null);
@@ -184,21 +201,27 @@ export function generateLevel(opts: GenOptions): LevelData {
       cells[p.y * width + p.x] = { d: randomDecoyDirs(rng), r: 0, rot: true, k: 'pipe' };
     }
 
-    // 打乱：解路径上的可旋转方块随机转 0..3 次（大部分不为 0）
+    // 打乱：按目标成本定向分配每格的旋转次数（1..3 次），
+    // 让「参考解步数」与路径长度成正比，避免随机打乱导致成本暴涨/暴跌。
+    const inner = path.length - 2;
     let cost = 0;
-    for (let i = 1; i < path.length - 1; i++) {
-      const p = path[i];
-      const cell = cells[p.y * width + p.x]!;
-      const r = rng() < 0.12 ? 0 : 1 + Math.floor(rng() * 3);
-      cell.r = r;
-      cost += (4 - r) % 4;
-    }
-    if (cost === 0 && path.length > 2) {
-      // 保证初始状态不是已解状态
-      const p = path[1];
-      const cell = cells[p.y * width + p.x]!;
-      cell.r = 1;
-      cost = 3;
+    if (inner > 0) {
+      const perTile = new Array<number>(inner).fill(1);
+      let extra = Math.max(0, Math.round(inner * 1.9) - inner);
+      let guardCount = 0;
+      while (extra > 0 && guardCount++ < inner * 20) {
+        const i = Math.floor(rng() * inner);
+        if (perTile[i] < 3) {
+          perTile[i] += 1;
+          extra -= 1;
+        }
+      }
+      for (let i = 0; i < inner; i++) {
+        const p = path[i + 1];
+        const cell = cells[p.y * width + p.x]!;
+        cell.r = (4 - perTile[i]) % 4;
+        cost += perTile[i];
+      }
     }
     for (const p of decoyCells) {
       cells[p.y * width + p.x]!.r = Math.floor(rng() * 4);
@@ -209,8 +232,8 @@ export function generateLevel(opts: GenOptions): LevelData {
       name: opts.name,
       width,
       height,
-      start: { ...start, dir: 2 },
-      goal: { ...goal, dir: 8 },
+      start: { ...start, dir: startDir },
+      goal: { ...goal, dir: goalDir },
       cells,
       stepLimit: cost + opts.slack,
       solutionPath: path,

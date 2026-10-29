@@ -6,6 +6,7 @@ export * from './core/index';
 export { AppController } from './app/AppController';
 export type { AppDeps } from './app/AppController';
 export { UIManager } from './ui/UIManager';
+export { CanvasRenderer } from './render/Renderer';
 export { layout, hitTest, computeBoardRect } from './ui/layout';
 export type { LayoutEnv } from './ui/layout';
 export { designSize, computeViewport, THEME, DESIGN_WIDTH, MIN_DESIGN_HEIGHT } from './ui/theme';

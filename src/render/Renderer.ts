@@ -265,26 +265,42 @@ export class CanvasRenderer {
     }
   }
 
-  /** 空格（不可放置方块）的浅槽，用于表达网格结构 */
+  /** 空格：画成带斜线纹理的「绝缘块」，让棋盘结构完整、不出现视觉破洞 */
   private drawVoidSlot(r: Rect): void {
     const ctx = this.ctx;
     const size = Math.min(r.w, r.h);
-    const pad = size * 0.09;
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    roundRectPath(ctx, r.x + pad, r.y + pad, r.w - pad * 2, r.h - pad * 2, size * 0.16);
-    ctx.fillStyle = 'rgba(10,20,34,0.55)';
+    const pad = Math.max(3, size * 0.06);
+    const x = r.x + pad;
+    const y = r.y + pad;
+    const w = r.w - pad * 2;
+    const h = r.h - pad * 2;
+    roundRectPath(ctx, x, y, w, h, size * 0.18);
+    ctx.fillStyle = '#0B1524';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(58,84,112,0.35)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(46,68,94,0.5)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // 斜线纹理：表示这里绝缘、不能放方块
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, size * 0.18);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(62,88,118,0.28)';
+    ctx.lineWidth = Math.max(2, size * 0.03);
+    const step = size * 0.22;
+    for (let d = -h; d < w + h; d += step) {
+      ctx.beginPath();
+      ctx.moveTo(x + d, y);
+      ctx.lineTo(x + d - h, y + h);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
   private drawTile(tile: Tile, r: Rect, active: boolean, solved: boolean, now: number): void {
     const ctx = this.ctx;
     const size = Math.min(r.w, r.h);
-    const pad = size * 0.05;
+    const pad = Math.max(3, size * 0.06);
     const inner: Rect = { x: r.x + pad, y: r.y + pad, w: r.w - pad * 2, h: r.h - pad * 2 };
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
@@ -315,14 +331,16 @@ export class CanvasRenderer {
     ctx.translate(cx, cy);
     ctx.rotate(angle);
     ctx.lineCap = 'round';
-    ctx.lineWidth = size * 0.13;
+    ctx.lineWidth = size * 0.115;
     ctx.strokeStyle = wireColor;
     if (active) {
       ctx.shadowColor = 'rgba(123,247,217,0.75)';
       ctx.shadowBlur = 14;
     }
+    // 注意：这里必须用 baseDirs（解状态方向），因为画布已按 angle 旋转过；
+    // 若用 tile.dirs（已含旋转）会重复旋转 90°，导致「看起来转对了却不亮」。
     for (const d of DIRS) {
-      if ((tile.dirs & d) === 0) continue;
+      if ((tile.baseDirs & d) === 0) continue;
       const v = DIR_VECTOR[d];
       ctx.beginPath();
       ctx.moveTo(0, 0);
