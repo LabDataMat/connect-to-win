@@ -20,15 +20,16 @@
       }
       #game {
         display: block;
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        /* 用 100% 而不是 100vh：iOS Safari 的 100vh 包含被地址栏遮挡的部分，会导致画面被裁切 */
+        height: 100%;
         touch-action: none;
         user-select: none;
       }
       #hint {
         position: fixed;
         left: 50%;
-        bottom: 8px;
+        bottom: calc(8px + env(safe-area-inset-bottom, 0px));
         transform: translateX(-50%);
         color: rgba(140, 163, 194, 0.55);
         font: 12px/1.6 "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -39,7 +40,7 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="hint">本地预览模式 · 微信小游戏版通过 dist/wxgame 构建</div>
+    <div id="hint">接通就赢 · 网页版</div>
     <script src="./game.js"></script>
   </body>
 </html>

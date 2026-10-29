@@ -1,6 +1,6 @@
 {
   "name": "connect-to-win",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "《接通就赢》- 2D 电路旋转解谜微信小游戏（MVP）",
   "type": "module",
@@ -14,7 +14,8 @@
     "build": "node tools/build.mjs",
     "dev": "node tools/serve.mjs",
     "build:testkit": "esbuild src/testkit.ts --bundle --format=esm --outfile=build/testkit.mjs --log-level=warning",
-    "build:wx": "node tools/build.mjs"
+    "build:wx": "node tools/build.mjs",
+    "pack:pages": "npm run build && node tools/pack-pages.mjs"
   },
   "keywords": [
     "wechat",

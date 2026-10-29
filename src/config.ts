@@ -22,7 +22,7 @@ export interface GameConfig {
 }
 
 export const GAME_CONFIG: GameConfig = {
-  version: '0.1.0',
+  version: '0.3.0',
   rewardedAdUnitId: '',
   interstitialAdUnitId: '',
   enableInterstitial: false,
