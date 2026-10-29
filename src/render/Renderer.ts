@@ -478,30 +478,15 @@ export class CanvasRenderer {
         }
         ctx.restore();
 
-        if (locked) {
-          // 右上角小锁
-          const lx = r.x + r.w - 26;
-          const ly = r.y + 16;
-          ctx.save();
-          ctx.strokeStyle = 'rgba(150,180,210,0.6)';
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.arc(lx, ly + 3, 6, Math.PI, Math.PI * 2);
-          ctx.stroke();
-          roundRectPath(ctx, lx - 8, ly + 3, 16, 12, 3);
-          ctx.fillStyle = 'rgba(150,180,210,0.4)';
-          ctx.fill();
-          ctx.restore();
-        }
         if (cleared) {
           ctx.save();
           ctx.strokeStyle = THEME.color.primary;
-          ctx.lineWidth = 4;
+          ctx.lineWidth = 3.5;
           ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.moveTo(r.x + r.w - 34, r.y + 26);
-          ctx.lineTo(r.x + r.w - 25, r.y + 35);
-          ctx.lineTo(r.x + r.w - 12, r.y + 18);
+          ctx.moveTo(r.x + r.w - 30, r.y + r.h - 26);
+          ctx.lineTo(r.x + r.w - 22, r.y + r.h - 18);
+          ctx.lineTo(r.x + r.w - 10, r.y + r.h - 34);
           ctx.stroke();
           ctx.restore();
         }
