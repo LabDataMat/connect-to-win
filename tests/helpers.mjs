@@ -8,6 +8,7 @@ import {
   DevAdsAdapter,
   DESIGN_WIDTH,
   computeViewport,
+  OptimalSolver,
 } from '../build/testkit.mjs';
 
 /** 内存存储，可模拟读写失败 */
@@ -76,6 +77,12 @@ export class FakePlatform {
   share() {
     this.shareCalls += 1;
   }
+  createOffscreenCanvas() {
+    return null;
+  }
+  shareCanvasImage() {
+    return false;
+  }
   log() {}
   emitVisibility(visible) {
     for (const cb of this.visCbs) cb(visible);
@@ -132,16 +139,15 @@ export function tapCell(app, platform, x, y) {
   tapDesign(app, platform, el.rect.x + el.rect.w / 2, el.rect.y + el.rect.h / 2);
 }
 
-/** 按参考解把每格转回解状态（步数与 solutionCost 一致） */
+/** 按最优解操作（步数 = minSteps，应拿 3 星） */
 export function solveCurrentLevel(app, platform) {
   const level = app.level;
-  for (const p of level.solutionPath) {
-    if (!app.game || app.game.status === 'won') break;
-    const tile = app.game.board.tileAt(p.x, p.y);
-    const turns = tile.turnsToSolution;
-    for (let i = 0; i < turns; i++) {
-      if (app.game.status === 'won') break;
-      tapCell(app, platform, p.x, p.y);
+  const sol = OptimalSolver.solve(level);
+  if (!sol.solved) throw new Error('关卡无解: ' + level.id);
+  for (const s of sol.steps) {
+    for (let i = 0; i < s.turns; i++) {
+      if (!app.game || app.game.status === 'won') break;
+      tapCell(app, platform, s.x, s.y);
     }
   }
 }

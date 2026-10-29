@@ -103,7 +103,9 @@ function buildHome(view: ViewState, env: LayoutEnv): UIElement[] {
     fontSize: THEME.font.small,
   }));
 
-  const progress = `已通关 ${Object.values(view.save.levels).filter((l) => l.cleared).length} / ${view.levelCount}`;
+  const clearedCount = Object.values(view.save.levels).filter((l) => l.cleared).length;
+  const totalStars = Object.values(view.save.levels).reduce((sum, l) => sum + (l.stars || 0), 0);
+  const progress = `已通关 ${clearedCount} / ${view.levelCount} · ★ ${totalStars} / ${view.levelCount * 3}`;
   els.push(text('progress', progress, 0, h - safeBottom - 168, 750, 36, THEME.font.small, { color: THEME.color.textDim }));
   els.push(button('btn.share', '分享给好友', centerX(220), h - safeBottom - 116, 220, 68, { type: 'share' }, 'plain', {
     fontSize: THEME.font.small,
@@ -146,13 +148,13 @@ function buildLevels(view: ViewState, env: LayoutEnv): UIElement[] {
     const y = y0 + row * (nodeH + gapY);
     const unlocked = id <= Math.max(1, view.save.highestUnlocked);
     const cleared = view.save.levels[String(id)]?.cleared === true;
-    const best = view.save.levels[String(id)]?.bestSteps ?? null;
     els.push({
       id: `level.${id}`,
       kind: 'levelNode',
       rect: rect(x, y, nodeW, nodeH),
       label: String(id),
-      sub: cleared && best !== null ? `${best}步` : unlocked ? '' : '未解锁',
+      sub: cleared ? '' : unlocked ? '' : '未解锁',
+      stars: cleared ? view.save.levels[String(id)]?.stars ?? 1 : 0,
       action: unlocked ? { type: 'selectLevel', id } : undefined,
       disabled: !unlocked,
       locked: !unlocked,
@@ -285,17 +287,34 @@ function buildModal(view: ViewState, env: LayoutEnv): UIElement[] {
 
   if (modal === 'win') {
     const win = view.win;
-    const { els: base, panelRect } = modalBase(env, 640);
+    const { els: base, panelRect } = modalBase(env, win?.daily ? 760 : 700);
     els.push(...base);
     const allDone = win ? !win.hasNext && !win.daily : false;
     const title = allDone ? '全部通关！' : '接通成功';
-    els.push({ ...text('modal.title', title, panelRect.x, panelRect.y + 46, panelRect.w, 66, THEME.font.h1, { bold: true }), layer: 'modal' });
+    els.push({ ...text('modal.title', title, panelRect.x, panelRect.y + 40, panelRect.w, 66, THEME.font.h1, { bold: true }), layer: 'modal' });
+
+    // 三颗星
+    const stars = win?.stars ?? 0;
+    const starSize = 64;
+    const starGap = 18;
+    const starTotal = starSize * 3 + starGap * 2;
+    const starX = (750 - starTotal) / 2;
+    for (let i = 0; i < 3; i++) {
+      els.push({
+        id: `star.${i}`,
+        kind: 'icon',
+        rect: rect(starX + i * (starSize + starGap), panelRect.y + 106 + (i === 1 ? -6 : 0), starSize, starSize),
+        value: i < stars ? 1 : 0,
+        layer: 'modal',
+      });
+    }
+
     els.push({
       ...text(
         'modal.sub',
-        win ? `${win.daily ? '今日挑战' : '本关'}用了 ${win.steps} 步 · 目标 ${win.limit} 步` : '',
+        win ? `${win.daily ? '今日挑战' : '本关'} ${win.steps} 步 · 最优 ${win.minSteps} 步` : '',
         panelRect.x,
-        panelRect.y + 120,
+        panelRect.y + 182,
         panelRect.w,
         40,
         THEME.font.body,
@@ -306,9 +325,11 @@ function buildModal(view: ViewState, env: LayoutEnv): UIElement[] {
     els.push({
       ...text(
         'modal.best',
-        win ? `${win.newBest ? '新纪录！' : '最佳'} ${win.best ?? win.steps} 步${win.unlockedNext ? ' · 已解锁下一关' : ''}` : '',
+        win
+          ? `${win.newStars ? '新纪录！' : '最佳'} ${win.best ?? win.steps} 步${win.unlockedNext ? ' · 已解锁下一关' : ''}`
+          : '',
         panelRect.x,
-        panelRect.y + 172,
+        panelRect.y + 228,
         panelRect.w,
         40,
         THEME.font.small,
@@ -323,7 +344,7 @@ function buildModal(view: ViewState, env: LayoutEnv): UIElement[] {
         'btn.next',
         allDone ? '返回关卡列表' : win?.daily ? '返回首页' : '下一关',
         bx,
-        panelRect.y + 250,
+        panelRect.y + 292,
         bw,
         96,
         allDone ? { type: 'openLevels' } : win?.daily ? { type: 'home' } : { type: 'next' },
@@ -332,8 +353,18 @@ function buildModal(view: ViewState, env: LayoutEnv): UIElement[] {
       ),
       layer: 'modal',
     });
-    els.push({ ...button('btn.replay', '再玩一次', bx, panelRect.y + 362, bw, 86, { type: 'replay' }, 'ghost'), layer: 'modal' });
-    els.push({ ...button('btn.levels', '关卡列表', bx, panelRect.y + 462, bw, 80, { type: 'openLevels' }, 'plain'), layer: 'modal' });
+    if (win?.daily) {
+      els.push({
+        ...button('btn.shareCard', '生成战绩卡', bx, panelRect.y + 400, bw, 86, { type: 'shareCard' }, 'ghost', {
+          fontSize: THEME.font.body,
+        }),
+        layer: 'modal',
+      });
+      els.push({ ...button('btn.replay', '再玩一次', bx, panelRect.y + 500, bw, 80, { type: 'replay' }, 'plain'), layer: 'modal' });
+    } else {
+      els.push({ ...button('btn.replay', '再玩一次', bx, panelRect.y + 400, bw, 86, { type: 'replay' }, 'ghost'), layer: 'modal' });
+      els.push({ ...button('btn.levels', '关卡列表', bx, panelRect.y + 496, bw, 80, { type: 'openLevels' }, 'plain'), layer: 'modal' });
+    }
     return els;
   }
 

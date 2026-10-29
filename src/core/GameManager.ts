@@ -82,15 +82,30 @@ export class GameManager {
     for (const cb of this.listeners) cb(e);
   }
 
-  /** 点击格子：旋转 90° 并结算步数/胜负 */
+  /**
+   * 点击格子：
+   * - 普通方块 -> 顺时针旋转 90°
+   * - 闸刀开关 -> 切换开/关（同样消耗 1 步）
+   * 两种情况都结算步数与胜负。
+   */
   rotate(x: number, y: number): RotateResult {
     if (this.isOver) {
       return { ok: false, changed: false, won: this._status === 'won', lost: this._status === 'lost', reason: 'game-over' };
     }
-    const outcome = this.board.rotateAt(x, y);
-    if (!outcome.ok) {
+    const tile = this.board.tileAt(x, y);
+    if (!tile) {
       this.emit({ type: 'blocked', x, y });
-      return { ok: false, changed: false, won: false, lost: false, reason: outcome.reason };
+      return { ok: false, changed: false, won: false, lost: false, reason: 'empty' };
+    }
+
+    if (tile.kind === 'switch') {
+      this.board.toggleAt(x, y);
+    } else {
+      const outcome = this.board.rotateAt(x, y);
+      if (!outcome.ok) {
+        this.emit({ type: 'blocked', x, y });
+        return { ok: false, changed: false, won: false, lost: false, reason: outcome.reason };
+      }
     }
 
     this._moves += 1;

@@ -45,6 +45,24 @@ export class AnalyticsAdapter {
     return this.buffer.filter((e) => e.name === name).length;
   }
 
+  /** 本地聚合：每个事件出现的次数（仅内存，不上报） */
+  counts(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const e of this.buffer) result[e.name] = (result[e.name] ?? 0) + 1;
+    return result;
+  }
+
+  /** 本地聚合：某事件的数值字段之和（如 session 时长） */
+  sum(name: string, key: string): number {
+    let total = 0;
+    for (const e of this.buffer) {
+      if (e.name !== name) continue;
+      const v = e.params[key];
+      if (typeof v === 'number' && Number.isFinite(v)) total += v;
+    }
+    return total;
+  }
+
   clear(): void {
     this.buffer.length = 0;
   }

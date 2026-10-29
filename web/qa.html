@@ -127,6 +127,22 @@
           daily() {
             tapId('btn.daily');
           },
+          card() {
+            const draw = window.__CTW_CARD__;
+            const c = document.createElement('canvas');
+            c.width = 750;
+            c.height = 1000;
+            c.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:auto;z-index:99;background:#000';
+            document.body.appendChild(c);
+            draw(c.getContext('2d'), {
+              dateKey: '2026-10-29',
+              steps: 14,
+              minSteps: 12,
+              stars: 2,
+              clearedLevels: 7,
+              totalLevels: 30,
+            });
+          },
           level() {
             const app = window.__CTW__.app;
             app.save.data.highestUnlocked = 30;

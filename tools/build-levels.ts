@@ -9,6 +9,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { generateLevel } from '../src/core/LevelGenerator';
 import { PathValidator } from '../src/core/PathValidator';
+import { OptimalSolver } from '../src/core/OptimalSolver';
 import { hashString } from '../src/core/LevelGenerator';
 import type { LevelData } from '../src/core/types';
 
@@ -24,6 +25,8 @@ interface LevelPlan {
   slack: number;
   diff: number;
   name: string;
+  /** 路径上的闸刀开关数量 */
+  switches?: number;
 }
 
 const PLANS: LevelPlan[] = [
@@ -39,24 +42,24 @@ const PLANS: LevelPlan[] = [
   { w: 5, h: 5, min: 10, max: 12, decoys: 12, slack: 3, diff: 3, name: '十格之内' },
   { w: 5, h: 5, min: 10, max: 12, decoys: 13, slack: 3, diff: 3, name: '三通分流' },
   { w: 6, h: 5, min: 11, max: 13, decoys: 15, slack: 3, diff: 3, name: '死路陷阱' },
-  { w: 6, h: 5, min: 11, max: 14, decoys: 14, slack: 2, diff: 3, name: '窄路' },
-  { w: 6, h: 6, min: 12, max: 15, decoys: 18, slack: 2, diff: 4, name: '电闸' },
-  { w: 6, h: 6, min: 13, max: 16, decoys: 18, slack: 2, diff: 4, name: '满载' },
-  { w: 6, h: 6, min: 13, max: 16, decoys: 18, slack: 2, diff: 4, name: '宽屏电网' },
-  { w: 6, h: 6, min: 14, max: 17, decoys: 17, slack: 2, diff: 4, name: '回路分叉' },
-  { w: 6, h: 6, min: 14, max: 17, decoys: 18, slack: 2, diff: 4, name: '静默电流' },
-  { w: 7, h: 6, min: 15, max: 18, decoys: 22, slack: 2, diff: 4, name: '网格迷宫' },
-  { w: 7, h: 6, min: 15, max: 19, decoys: 22, slack: 2, diff: 4, name: '过载' },
-  { w: 7, h: 6, min: 16, max: 19, decoys: 23, slack: 2, diff: 5, name: '保险丝' },
-  { w: 7, h: 7, min: 17, max: 20, decoys: 28, slack: 2, diff: 5, name: '紧凑布线' },
-  { w: 7, h: 7, min: 17, max: 20, decoys: 28, slack: 2, diff: 5, name: '脉冲' },
-  { w: 7, h: 7, min: 18, max: 21, decoys: 27, slack: 2, diff: 5, name: '高压区' },
-  { w: 8, h: 7, min: 18, max: 22, decoys: 33, slack: 2, diff: 5, name: '主干线' },
-  { w: 8, h: 7, min: 19, max: 23, decoys: 32, slack: 2, diff: 5, name: '并网' },
-  { w: 8, h: 7, min: 20, max: 24, decoys: 31, slack: 2, diff: 5, name: '变压器' },
-  { w: 8, h: 8, min: 20, max: 24, decoys: 38, slack: 2, diff: 5, name: '八乘八' },
-  { w: 8, h: 8, min: 21, max: 25, decoys: 37, slack: 2, diff: 5, name: '城市电网' },
-  { w: 8, h: 8, min: 22, max: 28, decoys: 35, slack: 2, diff: 5, name: '接通就赢' },
+  { w: 6, h: 5, min: 11, max: 14, decoys: 14, slack: 2, diff: 3, name: '窄路', switches: 1 },
+  { w: 6, h: 6, min: 12, max: 15, decoys: 18, slack: 2, diff: 4, name: '电闸', switches: 1 },
+  { w: 6, h: 6, min: 13, max: 16, decoys: 18, slack: 2, diff: 4, name: '满载', switches: 1 },
+  { w: 6, h: 6, min: 13, max: 16, decoys: 18, slack: 2, diff: 4, name: '宽屏电网', switches: 1 },
+  { w: 6, h: 6, min: 14, max: 17, decoys: 17, slack: 2, diff: 4, name: '回路分叉', switches: 1 },
+  { w: 6, h: 6, min: 14, max: 17, decoys: 18, slack: 2, diff: 4, name: '静默电流', switches: 1 },
+  { w: 7, h: 6, min: 15, max: 18, decoys: 22, slack: 2, diff: 4, name: '网格迷宫', switches: 1 },
+  { w: 7, h: 6, min: 15, max: 19, decoys: 22, slack: 2, diff: 4, name: '过载', switches: 1 },
+  { w: 7, h: 6, min: 16, max: 19, decoys: 23, slack: 2, diff: 5, name: '保险丝', switches: 1 },
+  { w: 7, h: 7, min: 17, max: 20, decoys: 28, slack: 2, diff: 5, name: '紧凑布线', switches: 1 },
+  { w: 7, h: 7, min: 17, max: 20, decoys: 28, slack: 2, diff: 5, name: '脉冲', switches: 2 },
+  { w: 7, h: 7, min: 18, max: 21, decoys: 27, slack: 2, diff: 5, name: '高压区', switches: 2 },
+  { w: 8, h: 7, min: 18, max: 22, decoys: 33, slack: 2, diff: 5, name: '主干线', switches: 2 },
+  { w: 8, h: 7, min: 19, max: 23, decoys: 32, slack: 2, diff: 5, name: '并网', switches: 2 },
+  { w: 8, h: 7, min: 20, max: 24, decoys: 31, slack: 2, diff: 5, name: '变压器', switches: 2 },
+  { w: 8, h: 8, min: 20, max: 24, decoys: 38, slack: 2, diff: 5, name: '八乘八', switches: 2 },
+  { w: 8, h: 8, min: 21, max: 25, decoys: 37, slack: 2, diff: 5, name: '城市电网', switches: 2 },
+  { w: 8, h: 8, min: 22, max: 28, decoys: 35, slack: 2, diff: 5, name: '接通就赢', switches: 2 },
 ];
 
 function build(): LevelData[] {
@@ -71,9 +74,11 @@ function build(): LevelData[] {
     const area = plan.w * plan.h;
     if (area < prevArea) throw new Error(`关卡 ${id} 网格面积小于上一关`);
 
-    let chosen: { level: LevelData; pathLength: number; cost: number } | null = null;
-    // 用不同种子重试，直到满足难度曲线约束（路径不缩短、参考步数不下降、单关增幅受控）
-    for (let k = 0; k < 400 && !chosen; k++) {
+    let chosen: { level: LevelData; pathLength: number; cost: number; minSteps: number } | null = null;
+    // 用不同种子重试，直到同时满足：
+    // 1) 难度曲线约束（路径不缩短、参考步数不下降、单关增幅受控）
+    // 2) 不存在「捷径」——最优解不能明显短于设计路径，否则玩家随便转几下就通关
+    for (let k = 0; k < 900 && !chosen; k++) {
       const level = generateLevel({
         seed: hashString(`connect-to-win:level:${id}:${k}`),
         width: plan.w,
@@ -82,6 +87,7 @@ function build(): LevelData[] {
         maxPath: plan.max,
         decoys: plan.decoys,
         slack: plan.slack,
+        switches: plan.switches ?? 0,
         id,
         name: plan.name,
         difficulty: plan.diff,
@@ -91,7 +97,17 @@ function build(): LevelData[] {
       if (check.pathLength < prevPath) continue;
       if (check.solutionCost < prevCost) continue;
       if (check.solutionCost > prevCost + 12) continue;
-      chosen = { level, pathLength: check.pathLength, cost: check.solutionCost };
+
+      // 独立求解器算真实最优解，并据此收紧步数上限
+      const sol = OptimalSolver.solve(level);
+      if (!sol.solved) continue;
+      if (sol.minSteps < check.solutionCost * 0.72) continue; // 捷径过多，换种子
+      level.minSteps = sol.minSteps;
+      level.stepLimit = sol.minSteps + plan.slack;
+
+      const after = PathValidator.validateLevel(level);
+      if (!after.ok) continue;
+      chosen = { level, pathLength: check.pathLength, cost: check.solutionCost, minSteps: sol.minSteps };
     }
     if (!chosen) throw new Error(`关卡 ${id} 在约束下生成失败`);
 
@@ -100,7 +116,7 @@ function build(): LevelData[] {
     prevArea = area;
     levels.push(chosen.level);
     console.log(
-      `L${String(id).padStart(2, '0')} ${plan.w}x${plan.h} 路径${chosen.pathLength} 成本${chosen.cost} 上限${chosen.level.stepLimit} 干扰${plan.decoys} ${plan.name}`
+      `L${String(id).padStart(2, '0')} ${plan.w}x${plan.h} 路径${chosen.pathLength} 参考${chosen.cost} 最优${chosen.minSteps} 上限${chosen.level.stepLimit} 干扰${plan.decoys} ${plan.name}`
     );
   }
   return levels;

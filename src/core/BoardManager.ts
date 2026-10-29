@@ -36,7 +36,7 @@ export class BoardManager {
         let kind: TileKind = cell.k ?? 'pipe';
         if (x === start.x && y === start.y) kind = 'start';
         if (x === goal.x && y === goal.y) kind = 'goal';
-        this.tiles[y * width + x] = new Tile(x, y, cell.d, cell.r, cell.rot, kind);
+        this.tiles[y * width + x] = new Tile(x, y, cell.d, cell.r, cell.rot, kind, cell.on ?? true);
       }
     }
   }
@@ -60,6 +60,13 @@ export class BoardManager {
 
   get rotatableCount(): number {
     return this.allTiles.filter((t) => t.rotatable).length;
+  }
+
+  /** 切换开关，返回是否成功（非开关返回 false） */
+  toggleAt(x: number, y: number): boolean {
+    const tile = this.tileAt(x, y);
+    if (!tile) return false;
+    return tile.toggleSwitch();
   }
 
   /** 旋转指定格子，返回结果（不改变步数，由 GameManager 统计） */
@@ -121,19 +128,23 @@ export class BoardManager {
     }
   }
 
-  /** 恢复到关卡初始状态 */
+  /** 恢复到关卡初始状态（含开关状态） */
   reset(): void {
     for (const t of this.allTiles) {
       const cell = this.level.cells[this.index(t.x, t.y)];
-      if (cell) t.rotation = cell.r;
+      if (!cell) continue;
+      t.rotation = cell.r;
+      t.switchOn = cell.on ?? true;
     }
   }
 
-  /** 将参考解应用到棋盘（用于校验与提示），只改解路径上的方块 */
+  /** 将参考解应用到棋盘（用于校验与提示）：转回解状态，并打开路径上的开关 */
   applySolution(): void {
     for (const p of this.level.solutionPath) {
       const t = this.tileAt(p.x, p.y);
-      if (t) t.rotation = 0;
+      if (!t) continue;
+      t.rotation = 0;
+      if (t.kind === 'switch') t.switchOn = true;
     }
   }
 }

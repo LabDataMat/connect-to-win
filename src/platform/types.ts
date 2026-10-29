@@ -42,5 +42,9 @@ export interface Platform {
   onVisibility(cb: (visible: boolean) => void): void;
   vibrate(kind?: 'light' | 'medium'): void;
   share(opts: { title: string; imageUrl?: string }): void;
+  /** 创建离屏画布（用于生成战绩卡），不可用时返回 null */
+  createOffscreenCanvas(width: number, height: number): CanvasLike | null;
+  /** 把画布导出成图片并调起保存/分享；返回是否成功 */
+  shareCanvasImage(canvas: CanvasLike, width: number, height: number, fileName: string): boolean;
   log(msg: string): void;
 }

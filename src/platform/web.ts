@@ -112,6 +112,38 @@ export class WebPlatform implements Platform {
     console.info('[share:web]', opts.title);
   }
 
+  createOffscreenCanvas(width: number, height: number): CanvasLike | null {
+    try {
+      const c = document.createElement('canvas');
+      c.width = width;
+      c.height = height;
+      return c as unknown as CanvasLike;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Web 端：导出 PNG 并触发下载，同时在新标签页预览 */
+  shareCanvasImage(canvas: CanvasLike, _width: number, _height: number, fileName: string): boolean {
+    try {
+      const el = canvas as unknown as HTMLCanvasElement;
+      const dataUrl = el.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `${fileName}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      this.lastSharedImage = dataUrl;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 最近一次导出的图片（dataURL），便于调试与自动化验证 */
+  lastSharedImage: string | null = null;
+
   log(msg: string): void {
     console.info(msg);
   }

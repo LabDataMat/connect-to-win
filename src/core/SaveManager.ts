@@ -6,6 +6,8 @@ export const SAVE_VERSION = 1;
 export interface LevelProgress {
   cleared: boolean;
   bestSteps: number | null;
+  /** 最佳星级 0..3（0 表示未通关或旧存档） */
+  stars: number;
 }
 
 export interface DailyResult {
@@ -136,7 +138,9 @@ export class SaveManager {
           ? Math.round(v.bestSteps)
           : null;
         if (!cleared && best === null) continue;
-        d.levels[String(id)] = { cleared, bestSteps: best };
+        // 旧存档没有 stars 字段：已通关的至少给 1 星
+        const stars = cleared ? toInt(v.stars, 1, 1, 3) : 0;
+        d.levels[String(id)] = { cleared, bestSteps: best, stars };
       }
     }
 
@@ -193,13 +197,21 @@ export class SaveManager {
   }
 
   /** 通关记录；返回是否刷新了最佳步数与是否解锁了下一关 */
-  markLevelCleared(levelId: number, steps: number, totalLevels: number): { newBest: boolean; unlockedNext: boolean } {
+  markLevelCleared(
+    levelId: number,
+    steps: number,
+    totalLevels: number,
+    stars = 1
+  ): { newBest: boolean; unlockedNext: boolean; newStars: boolean; stars: number } {
     const key = String(levelId);
     const prev = this._data.levels[key];
     const newBest = !prev || prev.bestSteps === null || steps < prev.bestSteps;
+    const prevStars = prev?.stars ?? 0;
+    const nextStars = Math.max(prevStars, Math.min(3, Math.max(0, Math.round(stars))));
     this._data.levels[key] = {
       cleared: true,
       bestSteps: newBest ? steps : prev!.bestSteps,
+      stars: nextStars,
     };
     this._data.stats.totalClears += 1;
 
@@ -209,7 +221,17 @@ export class SaveManager {
       unlockedNext = true;
     }
     this._data.highestUnlocked = Math.min(Math.max(1, this._data.highestUnlocked), totalLevels);
-    return { newBest, unlockedNext };
+    return { newBest, unlockedNext, newStars: nextStars > prevStars, stars: nextStars };
+  }
+
+  /** 某关最佳星级（0 表示未通关） */
+  getStars(levelId: number): number {
+    return this._data.levels[String(levelId)]?.stars ?? 0;
+  }
+
+  /** 所有关卡星级之和，用于首页进度展示 */
+  get totalStars(): number {
+    return Object.values(this._data.levels).reduce((sum, l) => sum + (l.stars || 0), 0);
   }
 
   recordDailyResult(dateKey: string, cleared: boolean, steps: number): void {

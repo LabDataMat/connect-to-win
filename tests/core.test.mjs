@@ -11,6 +11,7 @@ import {
   BoardManager,
   PathValidator,
   GameManager,
+  OptimalSolver,
   LEVELS,
   LevelManager,
   DailyChallengeManager,
@@ -266,7 +267,16 @@ test('30 个固定关卡全部合法且存在可解路径', () => {
     const result = PathValidator.validateLevel(level);
     assert.equal(result.ok, true, `关卡 ${level.id} 校验失败: ${result.errors.join('; ')}`);
     assert.ok(result.solutionCost >= 1);
-    assert.ok(result.solutionCost <= level.stepLimit, `关卡 ${level.id} 步数上限不足`);
+
+    // 步数上限必须容得下独立求解器算出的最优解
+    const minSteps = level.minSteps ?? OptimalSolver.minSteps(level);
+    assert.ok(Number.isFinite(minSteps), `关卡 ${level.id} 无最优解`);
+    assert.ok(minSteps <= level.stepLimit, `关卡 ${level.id} 步数上限 ${level.stepLimit} < 最优 ${minSteps}`);
+    assert.equal(level.minSteps, minSteps, `关卡 ${level.id} 的 minSteps 与求解器结果不一致`);
+
+    // 最优解必须真的可执行
+    const opt = OptimalSolver.verify(level);
+    assert.equal(opt.ok, true, `关卡 ${level.id} 最优解不可执行: ${opt.reason ?? ''}`);
 
     const board = new BoardManager(level);
     board.applySolution();

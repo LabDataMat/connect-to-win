@@ -35,6 +35,8 @@ export interface GenOptions {
   decoys: number;
   /** 步数上限在参考解成本上的冗余 */
   slack: number;
+  /** 路径上放置的闸刀开关数量（关闭状态，需要玩家打开） */
+  switches?: number;
   id: number;
   name: string;
   difficulty: number;
@@ -201,6 +203,20 @@ export function generateLevel(opts: GenOptions): LevelData {
       cells[p.y * width + p.x] = { d: randomDecoyDirs(rng), r: 0, rot: true, k: 'pipe' };
     }
 
+    // 在路径中段放闸刀开关：不可旋转、初始关闭，需要玩家点一下才能导电
+    const switchCount = Math.min(opts.switches ?? 0, Math.max(0, path.length - 3));
+    if (switchCount > 0) {
+      const innerIdx = Array.from({ length: path.length - 2 }, (_, i) => i + 1);
+      const picked = shuffle(innerIdx, rng).slice(0, switchCount);
+      for (const i of picked) {
+        const p = path[i];
+        const cell = cells[p.y * width + p.x]!;
+        cell.k = 'switch';
+        cell.rot = false;
+        cell.on = false;
+      }
+    }
+
     // 打乱：按目标成本定向分配每格的旋转次数（1..3 次），
     // 让「参考解步数」与路径长度成正比，避免随机打乱导致成本暴涨/暴跌。
     const inner = path.length - 2;
@@ -219,12 +235,41 @@ export function generateLevel(opts: GenOptions): LevelData {
       for (let i = 0; i < inner; i++) {
         const p = path[i + 1];
         const cell = cells[p.y * width + p.x]!;
+        if (cell.k === 'switch') {
+          cell.r = 0; // 开关不可旋转，方向必须固定
+          continue;
+        }
         cell.r = (4 - perTile[i]) % 4;
         cost += perTile[i];
       }
     }
+    // 干扰块初始朝向尽量不直接接上主路径：否则很容易形成「捷径」，
+    // 玩家随便转两下就通关，关卡设计的最优解形同虚设。
+    const touchesPath = (p: Point, dirs: number): boolean => {
+      for (const d of [1, 2, 4, 8]) {
+        if ((dirs & d) === 0) continue;
+        const v = DIR_VECTOR[d as 1 | 2 | 4 | 8];
+        const nx = p.x + v.dx;
+        const ny = p.y + v.dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        if (!onPath.has(`${nx},${ny}`)) continue;
+        const nb = cells[ny * width + nx];
+        if (!nb) continue;
+        if ((nb.d & DIR_OPPOSITE[d]) !== 0) return true;
+      }
+      return false;
+    };
     for (const p of decoyCells) {
-      cells[p.y * width + p.x]!.r = Math.floor(rng() * 4);
+      const cell = cells[p.y * width + p.x]!;
+      let placed = false;
+      for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+        const r = Math.floor(rng() * 4);
+        if (!touchesPath(p, rotateMaskCW(cell.d, r))) {
+          cell.r = r;
+          placed = true;
+        }
+      }
+      if (!placed) cell.r = Math.floor(rng() * 4);
     }
 
     const level: LevelData = {

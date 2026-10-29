@@ -134,6 +134,56 @@ export class WeChatPlatform implements Platform {
     }
   }
 
+  /** 微信：第一次 createCanvas 是主屏画布，之后返回离屏画布 */
+  createOffscreenCanvas(width: number, height: number): CanvasLike | null {
+    try {
+      const c = wx.createCanvas();
+      c.width = width;
+      c.height = height;
+      return c as CanvasLike;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 微信：导出临时文件后调起「分享图片」菜单；失败则退回普通分享 */
+  shareCanvasImage(canvas: CanvasLike, width: number, height: number, fileName: string): boolean {
+    try {
+      wx.canvasToTempFilePath({
+        canvas,
+        x: 0,
+        y: 0,
+        width,
+        height,
+        destWidth: width,
+        destHeight: height,
+        fileType: 'png',
+        success: (res: { tempFilePath: string }) => {
+          try {
+            if (wx.showShareImageMenu) {
+              wx.showShareImageMenu({ path: res.tempFilePath });
+            } else {
+              wx.shareAppMessage({ title: '接通就赢 · 每日挑战', imageUrl: res.tempFilePath });
+            }
+          } catch {
+            /* ignore */
+          }
+        },
+        fail: () => {
+          try {
+            wx.showToast?.({ title: '图片生成失败', icon: 'none' });
+          } catch {
+            /* ignore */
+          }
+        },
+      });
+      void fileName;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   log(msg: string): void {
     console.info(msg);
   }

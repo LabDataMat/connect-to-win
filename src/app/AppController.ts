@@ -3,6 +3,10 @@ import { AnalyticsAdapter } from '../core/AnalyticsAdapter';
 import { AudioManager } from '../core/AudioManager';
 import { DailyChallengeManager } from '../core/DailyChallengeManager';
 import { GameManager } from '../core/GameManager';
+import { OptimalSolver } from '../core/OptimalSolver';
+import { PathValidator } from '../core/PathValidator';
+import { drawShareCard, SHARE_CARD_SIZE } from '../render/ShareCard';
+import { computeStars } from '../core/Stars';
 import { LevelManager } from '../core/LevelManager';
 import { SaveManager } from '../core/SaveManager';
 import type { LevelData } from '../core/types';
@@ -46,6 +50,11 @@ export class AppController {
   private lastFrame = 0;
   private cachedView: ViewState | null = null;
   private destroyed = false;
+  /** 最优解缓存：每日挑战每局只算一次，固定关卡算一次后常驻 */
+  private optimalCache = new Map<string, { path: { x: number; y: number }[]; minSteps: number }>();
+  /** 本次会话开始时间，用于统计单次游戏时长 */
+  private sessionStart = 0;
+  private firstClearLogged = false;
 
   constructor(private deps: AppDeps) {}
 
@@ -68,6 +77,7 @@ export class AppController {
     this.save.save();
     this.screen = 'home';
     this.modal = null;
+    this.sessionStart = this.platform.now();
     this.bump();
     this.deps.analytics.log('app_open', {
       version: GAME_CONFIG.version,
@@ -80,6 +90,19 @@ export class AppController {
   viewport(): Viewport {
     const s = this.platform.screen();
     return computeViewport(s.width, s.height);
+  }
+
+  /** 关卡最优解（独立求解器计算，缓存） */
+  optimalFor(level: LevelData): { path: { x: number; y: number }[]; minSteps: number } {
+    const key = `${level.id}|${level.dateKey ?? ''}|${level.width}x${level.height}`;
+    const cached = this.optimalCache.get(key);
+    if (cached) return cached;
+    const solved = OptimalSolver.solve(level);
+    const value = solved.solved
+      ? { path: solved.path, minSteps: solved.minSteps }
+      : { path: level.solutionPath, minSteps: level.minSteps ?? level.stepLimit };
+    this.optimalCache.set(key, value);
+    return value;
   }
 
   env(): LayoutEnv {
@@ -245,6 +268,9 @@ export class AppController {
         this.deps.analytics.log('share', { from: this.screen });
         this.toast('已调起分享');
         break;
+      case 'shareCard':
+        this.shareDailyCard();
+        break;
       case 'extraStepsAd':
         void this.requestExtraSteps();
         break;
@@ -283,9 +309,13 @@ export class AppController {
     this.modal = null;
     this.win = null;
     this.hintTiles.clear();
+    this.pushFlowEffect();
     this.save.setLastLevel(daily ? this.save.data.lastLevel : level.id);
     this.save.save();
     this.bump();
+    if (!daily && level.id === 1 && !this.save.isCleared(1)) {
+      this.deps.analytics.log('first_level_start', {});
+    }
     this.deps.analytics.log(daily ? 'daily_start' : 'level_start', {
       id: level.id,
       limit: level.stepLimit,
@@ -319,9 +349,26 @@ export class AppController {
       this.platform.vibrate('light');
       this.save.data.stats.totalMoves += 1;
       this.effects.push({ type: 'rotate', x, y, time: this.platform.now() });
+      this.pushFlowEffect();
       this.bump();
     } else if (res.reason === 'fixed') {
       this.toast('起点和终点不能旋转', 1200);
+    }
+  }
+
+  /** 每次棋盘变化后，让电流沿真实连通路径重新流动一遍（纯视觉，不影响判定） */
+  private pushFlowEffect(): void {
+    const game = this.game;
+    if (!game) return;
+    const now = this.platform.now();
+    const solvedPath = PathValidator.findPath(game.board);
+    if (solvedPath) {
+      this.effects.push({ type: 'flow', path: solvedPath, reachedGoal: true, time: now });
+      return;
+    }
+    const partial = PathValidator.longestReachablePath(game.board);
+    if (partial && partial.length > 1) {
+      this.effects.push({ type: 'flow', path: partial, reachedGoal: false, time: now });
     }
   }
 
@@ -335,6 +382,9 @@ export class AppController {
     const level = this.level;
     if (!game || !level) return;
     const steps = game.moves;
+    const optimal = this.optimalFor(level);
+    const minSteps = optimal.minSteps;
+    const stars = computeStars(steps, minSteps);
     let summary: WinSummary;
 
     if (this.dailyMode) {
@@ -349,10 +399,13 @@ export class AppController {
         unlockedNext: false,
         hasNext: false,
         daily: true,
+        stars,
+        minSteps,
+        newStars: true,
       };
-      this.deps.analytics.log('daily_win', { steps, limit: game.stepLimit, dateKey: key });
+      this.deps.analytics.log('daily_win', { steps, limit: game.stepLimit, dateKey: key, stars, minSteps });
     } else {
-      const r = this.save.markLevelCleared(level.id, steps, this.deps.levels.count);
+      const r = this.save.markLevelCleared(level.id, steps, this.deps.levels.count, stars);
       const next = this.deps.levels.nextLevelId(level.id);
       summary = {
         levelId: level.id,
@@ -363,12 +416,21 @@ export class AppController {
         unlockedNext: r.unlockedNext,
         hasNext: next !== null,
         daily: false,
+        stars: r.stars,
+        minSteps,
+        newStars: r.newStars,
       };
+      if (level.id === 1 && !this.firstClearLogged) {
+        this.firstClearLogged = true;
+        this.deps.analytics.log('first_level_win', { steps });
+      }
       this.deps.analytics.log('level_win', {
         id: level.id,
         steps,
         limit: game.stepLimit,
         newBest: r.newBest,
+        stars: r.stars,
+        minSteps,
       });
     }
 
@@ -443,7 +505,8 @@ export class AppController {
     const level = this.level;
     if (!game || !level || game.isOver) return;
     if (!game.useHint()) return;
-    this.hintTiles = new Set(level.solutionPath.map((p) => `${p.x},${p.y}`));
+    const optimal = this.optimalFor(level);
+    this.hintTiles = new Set(optimal.path.map((p) => `${p.x},${p.y}`));
     this.hintUntil = this.platform.now() + 2600;
     this.save.data.stats.hintsUsed += 1;
     this.save.save();
@@ -478,6 +541,40 @@ export class AppController {
     this.deps.analytics.log('progress_cleared');
   }
 
+  /** 生成每日挑战战绩卡（本地绘制，不上传任何数据，也不强制分享） */
+  private shareDailyCard(): void {
+    const win = this.win;
+    if (!win) return;
+    const size = SHARE_CARD_SIZE;
+    const canvas = this.platform.createOffscreenCanvas(size.width, size.height);
+    if (!canvas) {
+      this.toast('当前环境不支持生成图片');
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      this.toast('图片生成失败');
+      return;
+    }
+    const dateKey = DailyChallengeManager.dateKeyOf();
+    try {
+      drawShareCard(ctx, {
+        dateKey,
+        steps: win.steps,
+        minSteps: win.minSteps,
+        stars: win.stars,
+        clearedLevels: Object.values(this.save.data.levels).filter((l) => l.cleared).length,
+        totalLevels: this.deps.levels.count,
+      });
+    } catch {
+      this.toast('图片生成失败');
+      return;
+    }
+    const ok = this.platform.shareCanvasImage(canvas, size.width, size.height, `connect-to-win-${dateKey}`);
+    this.toast(ok ? '战绩卡已生成' : '图片保存失败');
+    this.deps.analytics.log('share_card', { dateKey, steps: win.steps, stars: win.stars, ok });
+  }
+
   /** 激励视频换取额外步数：只有平台确认完整播放才发放 */
   private async requestExtraSteps(): Promise<void> {
     const game = this.game;
@@ -499,7 +596,16 @@ export class AppController {
 
   // ---------- 生命周期 ----------
 
+  /** 记录本次会话时长（切后台/销毁时调用） */
+  private logSessionEnd(): void {
+    if (!this.sessionStart) return;
+    const seconds = Math.max(0, Math.round((this.platform.now() - this.sessionStart) / 1000));
+    this.deps.analytics.log('session_end', { seconds });
+    this.sessionStart = this.platform.now();
+  }
+
   onHide(): void {
+    this.logSessionEnd();
     this.save.save();
     if (this.screen === 'game' && this.game && !this.game.isOver && this.modal === null) {
       this.modal = 'pause';
@@ -522,6 +628,7 @@ export class AppController {
   }
 
   destroy(): void {
+    if (!this.destroyed) this.logSessionEnd();
     this.destroyed = true;
     this.save.save();
   }

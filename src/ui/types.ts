@@ -25,6 +25,7 @@ export type Action =
   | { type: 'closeModal' }
   | { type: 'about' }
   | { type: 'share' }
+  | { type: 'shareCard' }
   | { type: 'extraStepsAd' }
   | { type: 'noop' };
 
@@ -46,8 +47,10 @@ export interface UIElement {
   action?: Action;
   disabled?: boolean;
   variant?: 'primary' | 'ghost' | 'danger' | 'plain';
-  /** levelNode 用：1..5 星难度 */
+  /** levelNode 用：1..5 星难度；icon 用：0/1 表示星星亮暗 */
   value?: number;
+  /** levelNode 用：该关最佳星级 0..3 */
+  stars?: number;
   /** levelNode 用：是否锁定/是否通关 */
   locked?: boolean;
   cleared?: boolean;
@@ -68,6 +71,12 @@ export interface WinSummary {
   unlockedNext: boolean;
   hasNext: boolean;
   daily: boolean;
+  /** 本次星级 1..3 */
+  stars: number;
+  /** 该关最优步数（独立求解器得出） */
+  minSteps: number;
+  /** 是否刷新了该关最佳星级 */
+  newStars: boolean;
 }
 
 export interface ViewState {
@@ -90,10 +99,14 @@ export interface ViewState {
 
 /** 渲染层特效事件（由 AppController 产生，Renderer 消费） */
 export interface RenderEffect {
-  type: 'rotate' | 'win' | 'lose' | 'hint';
+  type: 'rotate' | 'win' | 'lose' | 'hint' | 'flow';
   x?: number;
   y?: number;
   time: number;
+  /** flow 用：电流路径（起点 -> 终点 或 起点 -> 断路点） */
+  path?: { x: number; y: number }[];
+  /** flow 用：电流是否真的到达终点 */
+  reachedGoal?: boolean;
 }
 
 export interface LayoutResult {

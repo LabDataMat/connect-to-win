@@ -4,6 +4,7 @@ import { DIRS, DIR_VECTOR } from '../core/types';
 import type { Tile } from '../core/Tile';
 import { THEME, computeViewport } from '../ui/theme';
 import type { LayoutResult, Rect, RenderEffect, UIElement, ViewState } from '../ui/types';
+import type { Point } from '../core/types';
 
 interface Particle {
   x: number;
@@ -45,6 +46,8 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 export class CanvasRenderer {
   private anims = new Map<string, TileAnim>();
   private particles: Particle[] = [];
+  private flow: { path: Point[]; start: number; duration: number; reachedGoal: boolean } | null = null;
+  private flash: { start: number } | null = null;
   private lastNow = 0;
   private bgCache: { h: number; grad: CanvasGradient } | null = null;
 
@@ -74,10 +77,26 @@ export class CanvasRenderer {
     if (view.screen === 'game' && layout.board && view.game) {
       this.drawBoard(view, layout.board, now);
     }
+    // 粒子与闪光画在弹窗之下，避免遮挡弹窗文字与按钮
+    this.updateAndDrawParticles(dt);
+
+    // 通关瞬间的灯光反馈：极短的白闪，之后交给终点发光与粒子
+    if (this.flash) {
+      const age = now - this.flash.start;
+      if (age < 240) {
+        ctx.save();
+        ctx.globalAlpha = 0.32 * (1 - age / 240);
+        ctx.fillStyle = '#EAFFFB';
+        ctx.fillRect(0, 0, 750, h);
+        ctx.restore();
+      } else {
+        this.flash = null;
+      }
+    }
+
     for (const el of layout.elements) {
       this.drawElement(el, now, pressedId);
     }
-    this.updateAndDrawParticles(dt);
   }
 
   // ---------- 背景 ----------
@@ -151,7 +170,11 @@ export class CanvasRenderer {
       if (e.type === 'rotate' && e.x !== undefined && e.y !== undefined) {
         const tile = view.game?.board.tileAt(e.x, e.y);
         if (tile) this.anims.set(`${e.x},${e.y}`, { start: now, to: tile.rotation });
+      } else if (e.type === 'flow' && e.path && e.path.length > 1) {
+        const duration = Math.min(900, Math.max(220, (e.path.length - 1) * 80));
+        this.flow = { path: e.path, start: now, duration, reachedGoal: e.reachedGoal === true };
       } else if (e.type === 'win' && layout.board && view.level) {
+        this.flash = { start: now };
         const b = layout.board;
         const tileSize = b.w / view.level.width;
         const gx = b.x + (view.level.goal.x + 0.5) * tileSize;
@@ -248,6 +271,8 @@ export class CanvasRenderer {
       }
     }
 
+    this.drawFlow(board, tileSize, now);
+
     // 提示：解路径高亮（半透明填充 + 描边，避免仅靠闪烁传达信息）
     if (view.hintTiles.size > 0) {
       const pulse = 0.55 + 0.25 * Math.sin(now / 220);
@@ -263,6 +288,77 @@ export class CanvasRenderer {
       }
       ctx.restore();
     }
+  }
+
+  /**
+   * 闸刀开关：两个固定触点 + 一根可动闸刀。
+   * 闭合时导通（绿色发光），断开时物理上不接触（橙色），状态一眼可辨。
+   */
+  private drawSwitchTile(tile: Tile, r: Rect, now: number): void {
+    const ctx = this.ctx;
+    const size = Math.min(r.w, r.h);
+    const pad = Math.max(3, size * 0.06);
+    const inner: Rect = { x: r.x + pad, y: r.y + pad, w: r.w - pad * 2, h: r.h - pad * 2 };
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    const on = tile.switchOn;
+
+    // 底座
+    roundRectPath(ctx, inner.x, inner.y, inner.w, inner.h, size * 0.18);
+    ctx.fillStyle = on ? '#17282A' : '#2A1E1A';
+    ctx.fill();
+    ctx.strokeStyle = on ? 'rgba(75,227,176,0.75)' : 'rgba(255,154,92,0.75)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    const dirs = tile.shapeDirs;
+    const horizontal = (dirs & (2 | 8)) !== 0; // 有左右开口就是横向开关
+    const armLen = size * 0.3;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (!horizontal) ctx.rotate(Math.PI / 2);
+
+    // 触点
+    ctx.fillStyle = 'rgba(200,220,240,0.7)';
+    for (const sx of [-armLen, armLen]) {
+      ctx.beginPath();
+      ctx.arc(sx, 0, size * 0.055, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 闸刀：闭合时水平贴合，断开时抬起
+    const lift = on ? 0 : -armLen * 0.85;
+    ctx.strokeStyle = on ? '#4BE3B0' : '#FF9A5C';
+    ctx.lineWidth = Math.max(3, size * 0.075);
+    ctx.lineCap = 'round';
+    if (on) {
+      ctx.shadowColor = 'rgba(75,227,176,0.8)';
+      ctx.shadowBlur = 12 + 4 * Math.sin(now / 260);
+    }
+    ctx.beginPath();
+    ctx.moveTo(-armLen, 0);
+    ctx.lineTo(0, lift);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 转轴
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.045, 0, Math.PI * 2);
+    ctx.fillStyle = on ? '#EAFFFB' : 'rgba(255,200,160,0.85)';
+    ctx.fill();
+    ctx.restore();
+
+    // 状态灯
+    ctx.beginPath();
+    ctx.arc(r.x + r.w - size * 0.16, r.y + size * 0.16, size * 0.045, 0, Math.PI * 2);
+    ctx.fillStyle = on ? '#4BE3B0' : 'rgba(255,154,92,0.55)';
+    if (on) {
+      ctx.shadowColor = 'rgba(75,227,176,0.9)';
+      ctx.shadowBlur = 10;
+    }
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
   /** 空格：画成带斜线纹理的「绝缘块」，让棋盘结构完整、不出现视觉破洞 */
@@ -297,6 +393,72 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  /**
+   * 电流传播：沿真实连通路径从起点流向终点（或流到断路处）。
+   * 纯视觉层，路径由 AppController 用 PathValidator 计算，因此不会穿过断路。
+   */
+  private drawFlow(board: Rect, tileSize: number, now: number): void {
+    const flow = this.flow;
+    if (!flow) return;
+    const ctx = this.ctx;
+    const elapsed = now - flow.start;
+    const t = Math.min(1, Math.max(0, elapsed / flow.duration));
+    const total = flow.path.length - 1;
+    const head = t * total;
+    const px = (p: Point) => ({ x: board.x + (p.x + 0.5) * tileSize, y: board.y + (p.y + 0.5) * tileSize });
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, tileSize * 0.11);
+    ctx.strokeStyle = 'rgba(190,255,244,0.95)';
+    ctx.shadowColor = 'rgba(123,247,217,0.9)';
+    ctx.shadowBlur = 16;
+
+    for (let i = 0; i < total; i++) {
+      if (head <= i) break;
+      const a = px(flow.path[i]);
+      const b = px(flow.path[i + 1]);
+      const seg = Math.min(1, head - i);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(a.x + (b.x - a.x) * seg, a.y + (b.y - a.y) * seg);
+      ctx.stroke();
+    }
+
+    const hi = Math.min(total - 1, Math.floor(head));
+    const frac = head - hi;
+    const a = px(flow.path[hi]);
+    const b = px(flow.path[Math.min(total, hi + 1)]);
+    const hx = a.x + (b.x - a.x) * frac;
+    const hy = a.y + (b.y - a.y) * frac;
+
+    const pulse = 1 + 0.15 * Math.sin(now / 90);
+    ctx.beginPath();
+    ctx.arc(hx, hy, Math.max(3, tileSize * 0.1 * pulse), 0, Math.PI * 2);
+    ctx.fillStyle = flow.reachedGoal ? '#EAFFFB' : '#FFD8A0';
+    ctx.shadowBlur = 22;
+    ctx.shadowColor = flow.reachedGoal ? 'rgba(123,247,217,1)' : 'rgba(255,190,110,0.9)';
+    ctx.fill();
+
+    // 断路：电流停在断点，闪一圈橙色提示，不扣分也不弹窗
+    if (!flow.reachedGoal && t >= 1) {
+      const age = elapsed - flow.duration;
+      if (age < 700) {
+        const k = 1 - age / 700;
+        ctx.globalAlpha = k * 0.85;
+        ctx.beginPath();
+        ctx.arc(hx, hy, tileSize * (0.16 + 0.22 * (1 - k)), 0, Math.PI * 2);
+        ctx.strokeStyle = '#FFB266';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    if (t >= 1 && (flow.reachedGoal || elapsed > flow.duration + 800)) this.flow = null;
+  }
+
   private drawTile(tile: Tile, r: Rect, active: boolean, solved: boolean, now: number): void {
     const ctx = this.ctx;
     const size = Math.min(r.w, r.h);
@@ -307,6 +469,11 @@ export class CanvasRenderer {
 
     const isStart = tile.kind === 'start';
     const isGoal = tile.kind === 'goal';
+
+    if (tile.kind === 'switch') {
+      this.drawSwitchTile(tile, r, now);
+      return;
+    }
 
     // 方块底色
     roundRectPath(ctx, inner.x, inner.y, inner.w, inner.h, size * 0.18);
@@ -516,26 +683,79 @@ export class CanvasRenderer {
         ctx.restore();
 
         if (cleared) {
-          ctx.save();
-          ctx.strokeStyle = THEME.color.primary;
-          ctx.lineWidth = 3.5;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(r.x + r.w - 30, r.y + r.h - 26);
-          ctx.lineTo(r.x + r.w - 22, r.y + r.h - 18);
-          ctx.lineTo(r.x + r.w - 10, r.y + r.h - 34);
-          ctx.stroke();
-          ctx.restore();
+          // 底部三颗小星，表示该关最佳星级
+          const stars = el.stars ?? 0;
+          const size = 9;
+          const gap = 13;
+          const totalW = size * 3 + gap * 2;
+          const sx = r.x + (r.w - totalW) / 2 + size / 2;
+          const sy = r.y + r.h - 20;
+          for (let i = 0; i < 3; i++) {
+            this.drawStar(sx + i * (size + gap), sy, size * 0.62, i < stars, 0.9);
+          }
         }
         return;
       }
       case 'icon': {
-        this.drawLogo(r, now);
+        if (el.id.startsWith('star.')) {
+          this.drawStarIcon(r, el.value === 1);
+        } else {
+          this.drawLogo(r, now);
+        }
         return;
       }
       default:
         return;
     }
+  }
+
+  /** 五角星路径 */
+  private starPath(cx: number, cy: number, outer: number, inner: number): void {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const radius = i % 2 === 0 ? outer : inner;
+      const a = (Math.PI / 5) * i - Math.PI / 2;
+      const x = cx + Math.cos(a) * radius;
+      const y = cy + Math.sin(a) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  private drawStar(cx: number, cy: number, size: number, filled: boolean, alpha = 1): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    this.starPath(cx, cy, size, size * 0.45);
+    if (filled) {
+      ctx.fillStyle = '#FFD166';
+      ctx.shadowColor = 'rgba(255,209,102,0.65)';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(150,175,205,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private drawStarIcon(r: Rect, filled: boolean): void {
+    const ctx = this.ctx;
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    const size = Math.min(r.w, r.h) * 0.5;
+    ctx.save();
+    if (filled) {
+      ctx.shadowColor = 'rgba(255,209,102,0.7)';
+      ctx.shadowBlur = 18;
+    }
+    this.drawStar(cx, cy, size, filled, 1);
+    ctx.restore();
   }
 
   private drawLogo(r: Rect, now: number): void {

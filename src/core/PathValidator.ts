@@ -51,6 +51,45 @@ export class PathValidator {
     return null;
   }
 
+  /**
+   * 从起点出发、电流实际能流到的最远路径（不通关时用于表现「电流到此为止」）。
+   * 返回从起点到最远可达格子的路径；起点无可达邻居时返回 null。
+   */
+  static longestReachablePath(board: BoardManager): Point[] | null {
+    const start = board.startTile;
+    if (!start) return null;
+    const key = (t: Tile) => `${t.x},${t.y}`;
+    const prev = new Map<string, string | null>();
+    const depth = new Map<string, number>();
+    const queue: Tile[] = [start];
+    prev.set(key(start), null);
+    depth.set(key(start), 0);
+    let farthest: Tile = start;
+
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      if ((depth.get(key(cur)) ?? 0) > (depth.get(key(farthest)) ?? 0)) farthest = cur;
+      for (const nb of board.connectedNeighbors(cur)) {
+        const nk = key(nb);
+        if (!prev.has(nk)) {
+          prev.set(nk, key(cur));
+          depth.set(nk, (depth.get(key(cur)) ?? 0) + 1);
+          queue.push(nb);
+        }
+      }
+    }
+
+    if (farthest === start) return null;
+    const path: Point[] = [];
+    let k: string | null = key(farthest);
+    while (k) {
+      const [x, y] = k.split(',').map(Number);
+      path.push({ x, y });
+      k = prev.get(k) ?? null;
+    }
+    return path.reverse();
+  }
+
   /** 起点与终点是否连通（即通关） */
   static isSolved(board: BoardManager): boolean {
     return PathValidator.findPath(board) !== null;
@@ -192,8 +231,9 @@ export class PathValidator {
     board.applySolution();
     if (!PathValidator.isSolved(board)) errors.push('应用参考解后仍未通关');
     if (cost < 1) errors.push('参考解所需步数为 0（初始即解，关卡无意义）');
-    if (Number.isInteger(level.stepLimit) && cost > level.stepLimit) {
-      errors.push(`参考解需要 ${cost} 步，超过步数上限 ${level.stepLimit}`);
+    // 步数上限必须容得下最优解；最优解由 OptimalSolver 在构建期写入 minSteps
+    if (level.minSteps !== undefined && Number.isInteger(level.stepLimit) && level.minSteps > level.stepLimit) {
+      errors.push(`最优解需要 ${level.minSteps} 步，超过步数上限 ${level.stepLimit}`);
     }
 
     // 起终点必须能在参考解中首尾相连（起点开口指向第二格）

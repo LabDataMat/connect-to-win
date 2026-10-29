@@ -13,14 +13,25 @@ export class Tile {
   readonly kind: TileKind;
   /** 当前旋转偏移 0..3，顺时针次数 */
   private _rotation: number;
+  /** 闸刀开关是否闭合（仅 kind === 'switch' 有意义） */
+  switchOn: boolean;
 
-  constructor(x: number, y: number, baseDirs: DirMask, rotation: number, rotatable: boolean, kind: TileKind) {
+  constructor(
+    x: number,
+    y: number,
+    baseDirs: DirMask,
+    rotation: number,
+    rotatable: boolean,
+    kind: TileKind,
+    switchOn = true
+  ) {
     this.x = x;
     this.y = y;
     this.baseDirs = baseDirs;
     this._rotation = ((rotation % 4) + 4) % 4;
     this.rotatable = rotatable;
     this.kind = kind;
+    this.switchOn = switchOn;
   }
 
   get rotation(): number {
@@ -31,9 +42,22 @@ export class Tile {
     this._rotation = ((v % 4) + 4) % 4;
   }
 
-  /** 当前实际开口方向 */
+  /** 当前实际开口方向（开关断开时不导电，视为无开口） */
   get dirs(): DirMask {
+    if (this.kind === 'switch' && !this.switchOn) return 0;
     return rotateMaskCW(this.baseDirs, this._rotation);
+  }
+
+  /** 开关/几何意义上的开口方向，忽略开关状态（用于渲染与求解） */
+  get shapeDirs(): DirMask {
+    return rotateMaskCW(this.baseDirs, this._rotation);
+  }
+
+  /** 切换开关；非开关方块返回 false */
+  toggleSwitch(): boolean {
+    if (this.kind !== 'switch') return false;
+    this.switchOn = !this.switchOn;
+    return true;
   }
 
   get point(): Point {
@@ -64,6 +88,6 @@ export class Tile {
   }
 
   clone(): Tile {
-    return new Tile(this.x, this.y, this.baseDirs, this._rotation, this.rotatable, this.kind);
+    return new Tile(this.x, this.y, this.baseDirs, this._rotation, this.rotatable, this.kind, this.switchOn);
   }
 }

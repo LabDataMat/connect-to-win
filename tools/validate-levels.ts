@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BoardManager } from '../src/core/BoardManager';
 import { PathValidator } from '../src/core/PathValidator';
+import { OptimalSolver } from '../src/core/OptimalSolver';
 import { generateDailyLevel } from '../src/core/LevelGenerator';
 import { DailyChallengeManager } from '../src/core/DailyChallengeManager';
 import type { LevelData } from '../src/core/types';
@@ -30,7 +31,7 @@ const fail = (msg: string) => {
 };
 
 console.log(`\n=== 固定关卡校验（共 ${levels.length} 关）===\n`);
-console.log('关卡  尺寸   路径  成本  上限  干扰  连通  状态');
+console.log('关卡  尺寸        参考  最优  上限  干扰  状态');
 const signatures = new Set<string>();
 const costs: number[] = [];
 
@@ -42,21 +43,26 @@ for (const level of levels) {
   const decoys = level.cells.filter((c) => c && c.k === 'pipe').length;
   const sig = `${level.width}x${level.height}|${level.cells.map((c) => (c ? c.d : 0)).join(',')}|${level.solutionPath.map((p) => `${p.x}.${p.y}`).join('-')}`;
 
-  const ok = result.ok && solvedAfterSolution;
+  const opt = OptimalSolver.verify(level);
+  const ok = result.ok && solvedAfterSolution && opt.ok;
   if (!ok) {
     for (const e of result.errors) fail(`关卡 ${level.id}: ${e}`);
     if (!solvedAfterSolution) fail(`关卡 ${level.id}: 应用参考解后不连通`);
+    if (!opt.ok) fail(`关卡 ${level.id}: 最优解不可执行（${opt.reason ?? 'unknown'}）`);
+  }
+  if (opt.ok && Number.isInteger(level.stepLimit) && opt.minSteps > level.stepLimit) {
+    fail(`关卡 ${level.id}: 最优解 ${opt.minSteps} 步 > 上限 ${level.stepLimit}`);
   }
   if (signatures.has(sig)) fail(`关卡 ${level.id}: 与其它关卡重复`);
   signatures.add(sig);
 
   costs.push(result.solutionCost);
   console.log(
-    `L${String(level.id).padStart(2, '0')}   ${level.width}x${level.height}  ${String(result.pathLength).padStart(3)}  ${String(
+    `L${String(level.id).padStart(2, '0')}  ${level.width}x${level.height}  路径${String(result.pathLength).padStart(3)}  参考${String(
       result.solutionCost
-    ).padStart(4)}  ${String(level.stepLimit).padStart(4)}  ${String(decoys).padStart(4)}  ${solvedAfterSolution ? '是' : '否'}    ${
-      ok ? 'OK' : 'FAIL'
-    }`
+    ).padStart(3)}  最优${String(Number.isFinite(opt.minSteps) ? opt.minSteps : '-').padStart(3)}  上限${String(level.stepLimit).padStart(
+      3
+    )}  干扰${String(decoys).padStart(3)}  ${ok ? 'OK' : 'FAIL'}`
   );
 }
 

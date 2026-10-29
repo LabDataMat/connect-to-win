@@ -27,6 +27,14 @@ export const DIR_OPPOSITE: Record<number, Dir> = {
   [W]: E,
 };
 
+/** 方向 -> 0..3 的索引，用于状态编码 */
+export const DIR_INDEX: Record<number, number> = {
+  [N]: 0,
+  [E]: 1,
+  [S]: 2,
+  [W]: 3,
+};
+
 export const DIR_LABEL: Record<number, string> = {
   [N]: '上',
   [E]: '右',
@@ -90,7 +98,7 @@ export function maskToString(mask: DirMask): string {
 }
 
 /** 方块种类 */
-export type TileKind = 'start' | 'goal' | 'pipe' | 'block' | 'empty';
+export type TileKind = 'start' | 'goal' | 'pipe' | 'block' | 'empty' | 'switch';
 
 export interface Point {
   x: number;
@@ -107,6 +115,8 @@ export interface CellData {
   rot: boolean;
   /** 种类，缺省为 pipe */
   k?: TileKind;
+  /** 开关初始状态（仅 k === 'switch' 时使用，缺省为 true） */
+  on?: boolean;
 }
 
 /** 固定关卡数据结构（也是每日挑战生成结果的数据结构） */
@@ -123,6 +133,8 @@ export interface LevelData {
   cells: (CellData | null)[];
   /** 目标步数（步数上限） */
   stepLimit: number;
+  /** 由独立求解器算出的最优步数（构建期写入，三星评价的基准） */
+  minSteps?: number;
   /** 参考解路径（从起点到终点，含起终点），用于提示与合法性校验 */
   solutionPath: Point[];
   /** 是否为每日挑战 */

@@ -2,6 +2,8 @@ export * from './types';
 export * from './Tile';
 export * from './BoardManager';
 export * from './PathValidator';
+export * from './OptimalSolver';
+export * from './Stars';
 export * from './LevelGenerator';
 export * from './LevelManager';
 export * from './DailyChallengeManager';
