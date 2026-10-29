@@ -8,7 +8,8 @@ import { SaveManager } from '../core/SaveManager';
 import type { LevelData } from '../core/types';
 import type { Platform } from '../platform/types';
 import { UIManager } from '../ui/UIManager';
-import { DESIGN_WIDTH, designSize } from '../ui/theme';
+import { DESIGN_WIDTH, computeViewport } from '../ui/theme';
+import type { Viewport } from '../ui/theme';
 import type { LayoutEnv } from '../ui/layout';
 import type { Action, Modal, RenderEffect, Screen, ViewState, WinSummary } from '../ui/types';
 
@@ -75,15 +76,20 @@ export class AppController {
     });
   }
 
+  /** 当前视口：缩放、设计尺寸、左右留白（宽屏时居中） */
+  viewport(): Viewport {
+    const s = this.platform.screen();
+    return computeViewport(s.width, s.height);
+  }
+
   env(): LayoutEnv {
     const s = this.platform.screen();
-    const { h } = designSize(s.width, s.height);
-    const scale = s.width / DESIGN_WIDTH;
+    const vp = this.viewport();
     return {
       w: DESIGN_WIDTH,
-      h,
-      safeTop: s.safeTop / scale + 12,
-      safeBottom: s.safeBottom / scale + 12,
+      h: vp.height,
+      safeTop: s.safeTop / vp.scale + 12,
+      safeBottom: s.safeBottom / vp.scale + 12,
     };
   }
 
@@ -154,11 +160,11 @@ export class AppController {
 
   /** 屏幕坐标（CSS 像素）点击 */
   tap(clientX: number, clientY: number): void {
-    const s = this.platform.screen();
-    const scale = s.width / DESIGN_WIDTH;
-    if (!Number.isFinite(scale) || scale <= 0) return;
-    const x = clientX / scale;
-    const y = clientY / scale;
+    const vp = this.viewport();
+    if (!Number.isFinite(vp.scale) || vp.scale <= 0) return;
+    // 屏幕坐标 -> 设计坐标（扣掉宽屏时的左右留白）
+    const x = (clientX - vp.offsetX * vp.scale) / vp.scale;
+    const y = clientY / vp.scale;
     this.ui.update(this.viewState(), this.env(), this.revision);
     const el = this.ui.findAt(x, y);
     if (el) this.ui.press(el.id, this.platform.now());

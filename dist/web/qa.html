@@ -46,16 +46,18 @@
         const label = document.getElementById('qa');
         label.textContent = 'QA: ' + scenario;
 
-        function scale() {
-          return window.innerWidth / 750;
+        function toClient(x, y) {
+          const app = window.__CTW__.app;
+          const vp = app.viewport();
+          return { x: x * vp.scale + vp.offsetX * vp.scale, y: y * vp.scale };
         }
 
         function tapDesign(x, y) {
-          const s = scale();
+          const p = toClient(x, y);
           const canvas = document.getElementById('game');
           const ev = new PointerEvent('pointerdown', {
-            clientX: x * s,
-            clientY: y * s,
+            clientX: p.x,
+            clientY: p.y,
             bubbles: true,
             pointerId: 1,
             isPrimary: true,

@@ -2,7 +2,7 @@ import type { Platform } from '../platform/types';
 import { PathValidator } from '../core/PathValidator';
 import { DIRS, DIR_VECTOR } from '../core/types';
 import type { Tile } from '../core/Tile';
-import { THEME, designSize } from '../ui/theme';
+import { THEME, computeViewport } from '../ui/theme';
 import type { LayoutResult, Rect, RenderEffect, UIElement, ViewState } from '../ui/types';
 
 interface Particle {
@@ -56,17 +56,19 @@ export class CanvasRenderer {
 
   draw(view: ViewState, layout: LayoutResult, effects: RenderEffect[], now: number, pressedId: string | null): void {
     const s = this.platform.screen();
-    const { h } = designSize(s.width, s.height);
-    const scale = s.width / 750;
+    const vp = computeViewport(s.width, s.height);
+    const h = vp.height;
     const ctx = this.ctx;
 
     const dt = this.lastNow === 0 ? 16 : Math.min(64, now - this.lastNow);
     this.lastNow = now;
 
-    ctx.setTransform(scale * s.dpr, 0, 0, scale * s.dpr, 0, 0);
-    ctx.clearRect(0, 0, 750, h);
+    // 宽屏时内容居中，左右留白由背景与暗化层填充
+    const k = vp.scale * s.dpr;
+    ctx.setTransform(k, 0, 0, k, vp.offsetX * vp.scale * s.dpr, 0);
+    ctx.clearRect(-vp.offsetX, 0, 750 + vp.offsetX * 2, h);
 
-    this.drawBackground(h, now);
+    this.drawBackground(h, now, vp.offsetX);
     this.applyEffects(effects, view, layout, now);
 
     if (view.screen === 'game' && layout.board && view.game) {
@@ -80,7 +82,7 @@ export class CanvasRenderer {
 
   // ---------- 背景 ----------
 
-  private drawBackground(h: number, now: number): void {
+  private drawBackground(h: number, now: number, gutter = 0): void {
     const ctx = this.ctx;
     if (!this.bgCache || this.bgCache.h !== h) {
       const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -89,7 +91,7 @@ export class CanvasRenderer {
       this.bgCache = { h, grad };
     }
     ctx.fillStyle = this.bgCache.grad;
-    ctx.fillRect(0, 0, 750, h);
+    ctx.fillRect(-gutter, 0, 750 + gutter * 2, h);
 
     // 装饰性电路纹理（固定图案，不随帧变化）
     ctx.save();
@@ -123,6 +125,23 @@ export class CanvasRenderer {
     ctx.arc(120, 150 + 110 * pulse, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // 宽屏留白区暗化 + 内容区边界线，突出中间的游戏区域
+    if (gutter > 0) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(3,7,14,0.55)';
+      ctx.fillRect(-gutter, 0, gutter, h);
+      ctx.fillRect(750, 0, gutter, h);
+      ctx.strokeStyle = 'rgba(96,140,190,0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, h);
+      ctx.moveTo(750, 0);
+      ctx.lineTo(750, h);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // ---------- 特效 ----------

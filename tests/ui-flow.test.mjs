@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp, tapId, tapCell, solveCurrentLevel, tapDesign } from './helpers.mjs';
+import { computeViewport, MIN_DESIGN_HEIGHT } from '../build/testkit.mjs';
 
 test('首页 → 开始游戏 → 进入第 1 关', () => {
   const { app, platform } = makeApp();
@@ -239,11 +240,17 @@ test('布局：常见屏幕尺寸下按钮不越界、不重叠', () => {
     { width: 414, height: 896 },
     { width: 390, height: 844 },
     { width: 768, height: 1024 },
+    // 桌面/横屏：比 750:1240 更宽的比例，必须靠左右留白保证完整可见
+    { width: 1024, height: 768 },
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
   ];
   for (const size of sizes) {
     const { app, platform } = makeApp(size);
     const env = app.env();
     const h = env.h;
+    assert.ok(h >= MIN_DESIGN_HEIGHT - 0.5, `${size.width}x${size.height} 设计高度 ${h} 小于最小高度`);
 
     const check = (screenName) => {
       for (const el of app.ui.elements) {
@@ -291,4 +298,43 @@ test('页面加载与返回不会残留旧状态', () => {
   tapId(app, platform, 'btn.play');
   assert.equal(app.game.moves, 0, '重新进入关卡步数应从 0 开始');
   assert.equal(app.modal, null);
+});
+
+test('视口计算：竖屏铺满、宽屏按高度缩放并居中留白', () => {
+  const phone = computeViewport(375, 812);
+  assert.equal(phone.offsetX, 0, '竖屏不应有左右留白');
+  assert.ok(Math.abs(phone.scale - 0.5) < 1e-9, '竖屏按宽度缩放');
+  assert.ok(Math.abs(phone.height - 1624) < 1e-6);
+
+  const wide = computeViewport(1440, 900);
+  assert.ok(wide.offsetX > 0, '宽屏应有左右留白');
+  assert.ok(Math.abs(wide.height - MIN_DESIGN_HEIGHT) < 1e-6, '宽屏按最小设计高度缩放');
+  assert.ok(Math.abs(wide.scale - 900 / MIN_DESIGN_HEIGHT) < 1e-9);
+  // 内容水平居中
+  const leftGutterPx = wide.offsetX * wide.scale;
+  const rightGutterPx = 1440 - (wide.offsetX + wide.width) * wide.scale;
+  assert.ok(Math.abs(leftGutterPx - rightGutterPx) < 0.5, '左右留白应对称');
+
+  const tablet = computeViewport(768, 1024);
+  assert.ok(tablet.offsetX > 0, '4:3 平板也应有留白');
+  assert.ok(tablet.height >= MIN_DESIGN_HEIGHT);
+});
+
+test('宽屏下点击位置正确（含左右留白偏移）', () => {
+  const { app, platform } = makeApp({ width: 1440, height: 900 });
+  assert.ok(app.viewport().offsetX > 0);
+  tapId(app, platform, 'btn.play');
+  assert.equal(app.screen, 'game', '宽屏下点「开始游戏」应进入关卡');
+
+  const level = app.level;
+  const cell = level.solutionPath[1];
+  const tile = app.game.board.tileAt(cell.x, cell.y);
+  const before = tile.rotation;
+  tapCell(app, platform, cell.x, cell.y);
+  if (app.game.status === 'playing') {
+    assert.equal(tile.rotation, (before + 1) % 4, '宽屏下点方块应旋转对应格子');
+  }
+
+  tapId(app, platform, 'btn.pause');
+  assert.equal(app.modal, 'pause');
 });

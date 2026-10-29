@@ -7,6 +7,7 @@ import {
   AnalyticsAdapter,
   DevAdsAdapter,
   DESIGN_WIDTH,
+  computeViewport,
 } from '../build/testkit.mjs';
 
 /** 内存存储，可模拟读写失败 */
@@ -97,10 +98,12 @@ export function makeApp(opts = {}) {
   return { app, platform, save, levels, daily, analytics };
 }
 
-/** 设计坐标 -> 屏幕坐标 */
+/** 设计坐标 -> 屏幕坐标（与渲染同一套视口计算，含宽屏留白） */
 function toClient(platform, x, y) {
-  const scale = platform.screen().width / DESIGN_WIDTH;
-  return { x: x * scale, y: y * scale };
+  const s = platform.screen();
+  const vp = computeViewport(s.width, s.height);
+  void DESIGN_WIDTH;
+  return { x: x * vp.scale + vp.offsetX * vp.scale, y: y * vp.scale };
 }
 
 export function tapDesign(app, platform, x, y) {

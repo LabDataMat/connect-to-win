@@ -52,9 +52,35 @@ export const THEME = {
 
 export const DESIGN_WIDTH = 750;
 
-/** 设计单位下的屏幕尺寸（宽度恒为 750） */
+/**
+ * 最小设计高度：界面布局按 750 × 1240 起算。
+ * 屏幕比 750:1240 更「宽」时（桌面浏览器、横屏、平板），按高度约束缩放并左右留白，
+ * 保证任何窗口比例下都能看到完整界面，而不是把内容挤出屏幕。
+ */
+export const MIN_DESIGN_HEIGHT = 1240;
+
+export interface Viewport {
+  /** 设计单位 → CSS 像素 */
+  scale: number;
+  /** 设计单位下的内容宽（恒为 750） */
+  width: number;
+  /** 设计单位下的内容高（≥ MIN_DESIGN_HEIGHT） */
+  height: number;
+  /** 内容区左右留白（设计单位），宽屏时 > 0 */
+  offsetX: number;
+}
+
+export function computeViewport(screenWidth: number, screenHeight: number): Viewport {
+  const sw = Math.max(1, screenWidth);
+  const sh = Math.max(1, screenHeight);
+  const scale = Math.min(sw / DESIGN_WIDTH, sh / MIN_DESIGN_HEIGHT);
+  const height = sh / scale;
+  const offsetX = Math.max(0, (sw - DESIGN_WIDTH * scale) / 2 / scale);
+  return { scale, width: DESIGN_WIDTH, height, offsetX };
+}
+
+/** 设计单位下的屏幕尺寸（宽度恒为 750，高度按视口计算） */
 export function designSize(screenWidth: number, screenHeight: number): { w: number; h: number } {
-  const w = DESIGN_WIDTH;
-  const h = (screenHeight / Math.max(1, screenWidth)) * DESIGN_WIDTH;
-  return { w, h };
+  const vp = computeViewport(screenWidth, screenHeight);
+  return { w: DESIGN_WIDTH, h: vp.height };
 }
