@@ -1,0 +1,24 @@
+{
+  "description": "接通就赢 - 2D 电路旋转解谜小游戏",
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": false,
+    "minified": true,
+    "newFeature": false,
+    "autoAudits": false,
+    "uploadWithSourceMap": false,
+    "uglifyFileName": false
+  },
+  "compileType": "game",
+  "libVersion": "3.5.0",
+  "appid": "touristappid",
+  "projectname": "connect-to-win",
+  "simulatorType": "game",
+  "condition": {}
+}

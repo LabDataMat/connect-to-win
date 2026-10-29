@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>接通就赢 · QA 预览</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #081120;
+        overflow: hidden;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        touch-action: none;
+        user-select: none;
+      }
+      #qa {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 4px;
+        color: rgba(140, 163, 194, 0.5);
+        font: 11px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif;
+        pointer-events: none;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="qa"></div>
+    <script src="./game.js"></script>
+    <script>
+      // QA 驱动脚本：通过真实 pointerdown 事件模拟点击，用于截图与流程验收。
+      // 仅在 Web 预览版存在，不进入微信小游戏包。
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const scenario = params.get('s') || 'home';
+        const label = document.getElementById('qa');
+        label.textContent = 'QA: ' + scenario;
+
+        function scale() {
+          return window.innerWidth / 750;
+        }
+
+        function tapDesign(x, y) {
+          const s = scale();
+          const canvas = document.getElementById('game');
+          const ev = new PointerEvent('pointerdown', {
+            clientX: x * s,
+            clientY: y * s,
+            bubbles: true,
+            pointerId: 1,
+            isPrimary: true,
+          });
+          canvas.dispatchEvent(ev);
+        }
+
+        function sync() {
+          const boot = window.__CTW__;
+          if (boot) boot.app.update(performance.now());
+        }
+
+        function tapId(id) {
+          const boot = window.__CTW__;
+          if (!boot) throw new Error('boot missing');
+          sync();
+          const el = boot.app.ui.find(id);
+          if (!el) throw new Error('element missing: ' + id);
+          tapDesign(el.rect.x + el.rect.w / 2, el.rect.y + el.rect.h / 2);
+        }
+
+        function tapCell(x, y) {
+          tapId('cell.' + x + '.' + y);
+        }
+
+        function solve() {
+          const app = window.__CTW__.app;
+          const level = app.level;
+          sync();
+          for (const p of level.solutionPath) {
+            if (app.game.status === 'won') break;
+            const tile = app.game.board.tileAt(p.x, p.y);
+            const turns = tile.turnsToSolution;
+            for (let i = 0; i < turns; i++) {
+              if (app.game.status === 'won') break;
+              tapCell(p.x, p.y);
+            }
+          }
+        }
+
+        const steps = {
+          home() {},
+          levels() {
+            tapId('btn.levels');
+          },
+          game() {
+            tapId('btn.play');
+          },
+          hint() {
+            tapId('btn.play');
+            setTimeout(() => tapId('btn.hint'), 200);
+          },
+          pause() {
+            tapId('btn.play');
+            setTimeout(() => tapId('btn.pause'), 200);
+          },
+          win() {
+            tapId('btn.play');
+            setTimeout(() => {
+              solve();
+            }, 200);
+          },
+          settings() {
+            tapId('btn.settings');
+          },
+          daily() {
+            tapId('btn.daily');
+          },
+        };
+
+        function report(extra) {
+          const boot = window.__CTW__;
+          if (!boot) return;
+          const a = boot.app;
+          label.textContent =
+            'QA ' + scenario + ' | screen=' + a.screen + ' modal=' + a.modal + ' moves=' + (a.game ? a.game.moves : '-') + ' hint=' + a.hintTiles.size + (extra ? ' | ' + extra : '');
+        }
+
+        window.addEventListener('load', () => {
+          setTimeout(() => {
+            try {
+              (steps[scenario] || steps.home)();
+              setTimeout(() => report(''), 400);
+            } catch (e) {
+              label.textContent = 'QA ERROR: ' + e.message;
+              label.style.color = '#ff6b7a';
+              console.error(e);
+            }
+          }, 250);
+        });
+      })();
+    </script>
+  </body>
+</html>
