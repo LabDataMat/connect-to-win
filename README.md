@@ -20,7 +20,7 @@
 | 2D 场景 / 节点 / 触摸 | 自研轻量 Canvas 2D 渲染层（`src/render/Renderer.ts`）+ 统一指针事件 |
 | 微信小游戏构建目标 | `npm run build` 直接产出 `dist/wxgame/`（`game.js` / `game.json` / `project.config.json`） |
 | 平台适配层 | `src/platform/`（Web / 微信双实现，业务层零平台判断） |
-| 包体 | 微信主包 **77.0 KB**（上限 4 MB） |
+| 包体 | 微信主包 **76.8 KB**（上限 4 MB） |
 | 运行依赖 | 0 个运行时依赖；素材全部为代码绘制矢量图形，无外部图片/音频 |
 
 这样做的代价与边界（已如实记录）：
@@ -156,8 +156,8 @@ F:/AI-Game
 
 | 产物 | 路径 | 体积 |
 | --- | --- | --- |
-| 浏览器预览 | `dist/web/index.html` + `dist/web/game.js` | 75.1 KB |
-| 微信小游戏 | `dist/wxgame/game.js` / `game.json` / `project.config.json` | 77.0 KB（主包上限 4 MB） |
+| 浏览器预览 | `dist/web/index.html` + `dist/web/game.js` | 75.0 KB |
+| 微信小游戏 | `dist/wxgame/game.js` / `game.json` / `project.config.json` | 76.8 KB（主包上限 4 MB） |
 
 构建命令：`npm run build`。产物由 `tools/build.mjs` 生成，`project.config.json` 中 `appid` 为 `touristappid`（游客模式），正式提审前必须替换为自己的小游戏 AppID。
 

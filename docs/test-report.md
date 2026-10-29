@@ -14,7 +14,7 @@
 | TypeScript 类型检查 | `npm run typecheck` | ✅ 0 error（`strict` + `noUnusedLocals` + `noUnusedParameters`） |
 | 自动化测试 | `npm test` | ✅ 52 / 52 通过，0 失败 |
 | 关卡合法性校验 | `npm run validate` | ✅ 30 关全部通过，负例全部被检出 |
-| 构建 | `npm run build` | ✅ Web 75.1 KB / 微信包 77.0 KB（主包上限 4 MB） |
+| 构建 | `npm run build` | ✅ Web 75.0 KB / 微信包 76.8 KB（主包上限 4 MB） |
 | 浏览器真实渲染 | 无头 Chrome 截图 | ✅ 首页/关卡/游戏/提示/暂停/通关/设置/每日挑战 8 张 |
 
 ```
@@ -52,9 +52,9 @@
 ```
 # npm run build 输出
 构建完成：
-  dist/web/index.html + game.js  75.1 KB
-  dist/wxgame/game.js            75.7 KB
-  dist/wxgame 合计               77.0 KB（微信小游戏主包上限 4 MB）
+  dist/web/index.html + game.js  75.0 KB
+  dist/wxgame/game.js            75.5 KB
+  dist/wxgame 合计               76.8 KB（微信小游戏主包上限 4 MB）
   ✓ 体积检查通过
 ```
 
