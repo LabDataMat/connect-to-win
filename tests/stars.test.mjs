@@ -92,7 +92,7 @@ test('端到端：按最优解通关拿 3 星', () => {
   for (const s of OptimalSolver.solve(app.level).steps) {
     for (let i = 0; i < s.turns; i++) {
       if (app.game.status === 'won') break;
-      tapCell(app, platform, s.x, s.y);
+      tapCell(app, platform, s.x, s.y, s.dir ?? 1);
     }
   }
   assert.equal(app.game.status, 'won');
@@ -126,7 +126,7 @@ test('端到端：多走 1 步仍可 2 星，再多则 1 星', () => {
   for (const s of OptimalSolver.solve(level).steps) {
     for (let i = 0; i < s.turns; i++) {
       if (app.game.status !== 'playing') break;
-      tapCell(app, platform, s.x, s.y);
+      tapCell(app, platform, s.x, s.y, s.dir ?? 1);
     }
   }
   if (app.game.status === 'won') {

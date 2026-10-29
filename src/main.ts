@@ -31,7 +31,8 @@ export function bootstrap(platform: Platform): BootResult {
 
   app.start();
 
-  platform.onPointer((p) => app.tap(p.x, p.y));
+  platform.onPointer((p) => app.pointerDown(p.x, p.y));
+  platform.onPointerUp?.(() => app.pointerUp());
   platform.onVisibility((visible) => {
     if (visible) app.onShow();
     else app.onHide();

@@ -54,6 +54,7 @@ export class FakePlatform {
     };
     this._now = 1000;
     this.pointerCbs = [];
+    this.pointerUpCbs = [];
     this.visCbs = [];
     this.shareCalls = 0;
   }
@@ -69,6 +70,9 @@ export class FakePlatform {
   requestFrame() {}
   onPointer(cb) {
     this.pointerCbs.push(cb);
+  }
+  onPointerUp(cb) {
+    this.pointerUpCbs.push(cb);
   }
   onVisibility(cb) {
     this.visCbs.push(cb);
@@ -132,11 +136,16 @@ export function tapId(app, platform, id) {
   return el;
 }
 
-export function tapCell(app, platform, x, y) {
+export function tapCell(app, platform, x, y, dir = 1) {
   app.update(platform.now());
   const el = app.ui.find(`cell.${x}.${y}`);
   if (!el) throw new Error(`格子不存在: ${x},${y}`);
-  tapDesign(app, platform, el.rect.x + el.rect.w / 2, el.rect.y + el.rect.h / 2);
+  const s = platform.screen();
+  const vp = computeViewport(s.width, s.height);
+  const cx = (el.rect.x + el.rect.w / 2) * vp.scale + vp.offsetX * vp.scale;
+  const cy = (el.rect.y + el.rect.h / 2) * vp.scale;
+  app.tap(cx, cy, dir);
+  app.update(platform.now());
 }
 
 /** 按最优解操作（步数 = minSteps，应拿 3 星） */
@@ -147,7 +156,7 @@ export function solveCurrentLevel(app, platform) {
   for (const s of sol.steps) {
     for (let i = 0; i < s.turns; i++) {
       if (!app.game || app.game.status === 'won') break;
-      tapCell(app, platform, s.x, s.y);
+      tapCell(app, platform, s.x, s.y, s.dir ?? 1);
     }
   }
 }

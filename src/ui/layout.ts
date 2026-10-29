@@ -206,6 +206,14 @@ function buildGame(view: ViewState, env: LayoutEnv): LayoutResult {
   const totalW = btnW * 3 + gap * 2;
   const startX = (750 - totalW) / 2;
   const barY = h - safeBottom - 138;
+  if (level.id <= 3) {
+    els.push(
+      text('game.tip', '点一下顺时针 · 长按逆时针', 0, barY - 44, 750, 32, THEME.font.tiny, {
+        color: THEME.color.textDim,
+      })
+    );
+  }
+
   els.push(button('btn.retry', '重试', startX, barY, btnW, btnH, { type: 'retry' }, 'ghost', { fontSize: THEME.font.body }));
   els.push(button('btn.hint', '提示', startX + btnW + gap, barY, btnW, btnH, { type: 'hint' }, 'ghost', { fontSize: THEME.font.body }));
   els.push(button('btn.pause', '暂停', startX + (btnW + gap) * 2, barY, btnW, btnH, { type: 'pause' }, 'ghost', { fontSize: THEME.font.body }));

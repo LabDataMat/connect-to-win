@@ -96,6 +96,16 @@ export class WebPlatform implements Platform {
     });
   }
 
+  onPointerUp(cb: (p: PointerInput) => void): void {
+    const el = this.canvas as unknown as HTMLCanvasElement;
+    const handler = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      cb({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+    el.addEventListener('pointerup', handler);
+    el.addEventListener('pointercancel', handler);
+  }
+
   onVisibility(cb: (visible: boolean) => void): void {
     this.visibilityCbs.push(cb);
   }

@@ -181,8 +181,51 @@ export class AppController {
     this.ui.update(this.viewState(now), this.env(), this.revision);
   }
 
-  /** 屏幕坐标（CSS 像素）点击 */
-  tap(clientX: number, clientY: number): void {
+  /** 长按判定阈值：超过则视为逆时针旋转 */
+  private static readonly LONG_PRESS_MS = 380;
+  private press: { x: number; y: number; time: number; timer: ReturnType<typeof setTimeout> | null } | null = null;
+
+  /**
+   * 按下：启动长按计时器。
+   * 平台不支持抬起事件时（极少数环境）退化为「按下即顺时针」，保证仍可玩。
+   */
+  pointerDown(clientX: number, clientY: number): void {
+    if (!this.platform.onPointerUp) {
+      this.tap(clientX, clientY, 1);
+      return;
+    }
+    this.cancelPress();
+    this.press = {
+      x: clientX,
+      y: clientY,
+      time: this.platform.now(),
+      timer: setTimeout(() => {
+        const p = this.press;
+        if (!p) return;
+        this.press = null;
+        this.tap(p.x, p.y, -1); // 长按 = 逆时针
+      }, AppController.LONG_PRESS_MS),
+    };
+  }
+
+  /** 抬起：短按触发顺时针 */
+  pointerUp(): void {
+    const p = this.press;
+    if (!p) return;
+    this.press = null;
+    if (p.timer) clearTimeout(p.timer);
+    if (this.platform.now() - p.time < AppController.LONG_PRESS_MS) {
+      this.tap(p.x, p.y, 1);
+    }
+  }
+
+  private cancelPress(): void {
+    if (this.press?.timer) clearTimeout(this.press.timer);
+    this.press = null;
+  }
+
+  /** 屏幕坐标（CSS 像素）点击；dir = 1 顺时针 / -1 逆时针 */
+  tap(clientX: number, clientY: number, dir: 1 | -1 = 1): void {
     const vp = this.viewport();
     if (!Number.isFinite(vp.scale) || vp.scale <= 0) return;
     // 屏幕坐标 -> 设计坐标（扣掉宽屏时的左右留白）
@@ -194,11 +237,11 @@ export class AppController {
     const action = this.ui.tap(x, y);
     if (action) {
       this.deps.audio.resume();
-      this.dispatch(action);
+      this.dispatch(action, dir);
     }
   }
 
-  dispatch(action: Action): void {
+  dispatch(action: Action, dir: 1 | -1 = 1): void {
     switch (action.type) {
       case 'home':
         this.leaveGame('home');
@@ -223,7 +266,7 @@ export class AppController {
         this.startDaily();
         break;
       case 'cell':
-        this.tapCell(action.x, action.y);
+        this.tapCell(action.x, action.y, dir);
         break;
       case 'pause':
         this.pause();
@@ -339,11 +382,11 @@ export class AppController {
     this.bump();
   }
 
-  private tapCell(x: number, y: number): void {
+  private tapCell(x: number, y: number, dir: 1 | -1 = 1): void {
     const game = this.game;
     if (!game || this.screen !== 'game' || this.modal !== null) return;
     if (game.isOver) return;
-    const res = game.rotate(x, y);
+    const res = game.rotate(x, y, dir);
     if (res.ok) {
       this.deps.audio.play('rotate');
       this.platform.vibrate('light');

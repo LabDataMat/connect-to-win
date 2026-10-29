@@ -6,8 +6,12 @@ import { Tile } from './Tile';
 export interface SolveStep {
   x: number;
   y: number;
-  /** 从当前状态转到目标朝向需要的顺时针次数（0 表示不用动） */
+  /** 需要旋转的次数 */
   turns: number;
+  /** 旋转方向：1 顺时针，-1 逆时针 */
+  dir: 1 | -1;
+  /** 闸刀开关：这一格是「点击切换」而不是旋转 */
+  toggle?: boolean;
 }
 
 export interface SolveResult {
@@ -64,7 +68,10 @@ export class OptimalSolver {
         if (!tile.rotatable && r !== 0) continue;
         const dirs = rotateMaskCW(tile.baseDirs, r);
         if ((dirs & required) !== required) continue;
-        let cost = (r - tile.rotation + 4) % 4;
+        // 顺时针与逆时针都只需 1 步，取更近的方向
+        const cw = (r - tile.rotation + 4) % 4;
+        const ccw = (tile.rotation - r + 4) % 4;
+        let cost = Math.min(cw, ccw);
         // 闸刀开关：关闭时必须先花 1 步打开
         if (tile.kind === 'switch' && !tile.switchOn) cost += 1;
         if (cost < best) best = cost;
@@ -147,20 +154,43 @@ export class OptimalSolver {
 
     if (!Number.isFinite(bestCost)) return UNSOLVED;
 
-    // 计算每格需要转几次
+    // 计算每格怎么操作（旋转几次、往哪个方向 / 或打开开关）
     const steps: SolveStep[] = [];
     for (let i = 0; i < bestPath.length - 1; i++) {
       const cur = bestPath[i];
       const tile = board.tileAt(cur.x, cur.y);
-      // 开关不可旋转，但需要「打开」这一步，必须计入 steps
-      if (!tile || (!tile.rotatable && tile.kind !== 'switch')) continue;
+      if (!tile) continue;
+
+      if (tile.kind === 'switch') {
+        if (!tile.switchOn) steps.push({ x: cur.x, y: cur.y, turns: 1, dir: 1, toggle: true });
+        continue;
+      }
+      if (!tile.rotatable) continue;
+
       const prev = i === 0 ? null : bestPath[i - 1];
       const next = bestPath[i + 1];
       let required = 0;
       if (prev) required |= dirFromDelta(prev.x - cur.x, prev.y - cur.y) as number;
       required |= dirFromDelta(next.x - cur.x, next.y - cur.y) as number;
-      const cost = tileCost(tile, required);
-      if (cost > 0 && Number.isFinite(cost)) steps.push({ x: cur.x, y: cur.y, turns: cost });
+
+      // 找出「转到能满足 required 的朝向」中步数最少的一种，并记录方向
+      let bestTurns = Infinity;
+      let bestDir: 1 | -1 = 1;
+      for (let r = 0; r < 4; r++) {
+        const dirs = rotateMaskCW(tile.baseDirs, r);
+        if ((dirs & required) !== required) continue;
+        const cw = (r - tile.rotation + 4) % 4;
+        const ccw = (tile.rotation - r + 4) % 4;
+        const useCw = cw <= ccw;
+        const turns = useCw ? cw : ccw;
+        if (turns < bestTurns) {
+          bestTurns = turns;
+          bestDir = useCw ? 1 : -1;
+        }
+      }
+      if (bestTurns > 0 && Number.isFinite(bestTurns)) {
+        steps.push({ x: cur.x, y: cur.y, turns: bestTurns, dir: bestDir });
+      }
     }
 
     return { solved: true, minSteps: bestCost, path: bestPath, steps };
@@ -183,12 +213,13 @@ export class OptimalSolver {
     for (const s of result.steps) {
       const tile = board.tileAt(s.x, s.y);
       if (!tile) return { ok: false, minSteps: result.minSteps, reason: `missing-tile:${s.x},${s.y}` };
+      if (s.toggle) {
+        if (!tile.switchOn) tile.switchOn = true;
+        continue;
+      }
       for (let i = 0; i < s.turns; i++) {
-        if (tile.kind === 'switch' && !tile.switchOn) {
-          tile.switchOn = true;
-        } else {
-          tile.rotateCW();
-        }
+        if (s.dir === 1) tile.rotateCW();
+        else tile.rotateCCW();
       }
     }
     const solved = PathValidator.isSolved(board);

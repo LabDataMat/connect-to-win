@@ -39,6 +39,8 @@ export interface Platform {
   now(): number;
   requestFrame(cb: () => void): void;
   onPointer(cb: (p: PointerInput) => void): void;
+  /** 抬起事件；支持时用于区分「点击」与「长按」 */
+  onPointerUp?(cb: (p: PointerInput) => void): void;
   onVisibility(cb: (visible: boolean) => void): void;
   vibrate(kind?: 'light' | 'medium'): void;
   share(opts: { title: string; imageUrl?: string }): void;

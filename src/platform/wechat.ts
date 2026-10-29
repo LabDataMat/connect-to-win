@@ -113,6 +113,16 @@ export class WeChatPlatform implements Platform {
     wx.onTouchStart(handler);
   }
 
+  onPointerUp(cb: (p: PointerInput) => void): void {
+    const handler = (e: any) => {
+      const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+      if (!t) return;
+      cb({ x: t.clientX, y: t.clientY });
+    };
+    wx.onTouchEnd?.(handler);
+    wx.onTouchCancel?.(handler);
+  }
+
   onVisibility(cb: (visible: boolean) => void): void {
     wx.onShow?.(() => cb(true));
     wx.onHide?.(() => cb(false));

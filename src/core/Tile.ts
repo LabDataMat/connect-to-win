@@ -71,9 +71,18 @@ export class Tile {
     return true;
   }
 
-  /** 回到解状态需要顺时针旋转的次数（0..3） */
+  /** 逆时针旋转 90°，不可旋转的方块返回 false */
+  rotateCCW(): boolean {
+    if (!this.rotatable) return false;
+    this._rotation = (this._rotation + 3) % 4;
+    return true;
+  }
+
+  /** 回到解状态需要的旋转次数（顺/逆取更近，0..2） */
   get turnsToSolution(): number {
-    return (4 - this._rotation) % 4;
+    const cw = (4 - this._rotation) % 4;
+    const ccw = (this._rotation - 0 + 4) % 4;
+    return Math.min(cw, ccw);
   }
 
   /** 是否朝向指定方向开口 */

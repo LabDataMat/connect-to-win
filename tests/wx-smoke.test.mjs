@@ -41,6 +41,7 @@ function makeWxEnv() {
   const ctx = makeCtx();
   const canvas = { width: 0, height: 0, getContext: () => ctx };
   const touchHandlers = [];
+  const touchEndHandlers = [];
   const storage = new Map();
   const wx = {
     createCanvas: () => canvas,
@@ -54,13 +55,15 @@ function makeWxEnv() {
     setStorageSync: (k, v) => storage.set(k, v),
     removeStorageSync: (k) => storage.delete(k),
     onTouchStart: (cb) => touchHandlers.push(cb),
+    onTouchEnd: (cb) => touchEndHandlers.push(cb),
+    onTouchCancel: (cb) => touchEndHandlers.push(cb),
     onShow: () => {},
     onHide: () => {},
     onWindowResize: () => {},
     vibrateShort: () => {},
     shareAppMessage: () => {},
   };
-  return { wx, canvas, touchHandlers, storage };
+  return { wx, canvas, touchHandlers, touchEndHandlers, storage };
 }
 
 function performance_now(sandbox) {
@@ -74,7 +77,7 @@ test('微信小游戏包：在模拟的 wx 环境中可启动并响应触摸', (
   const code = readFileSync(BUNDLE, 'utf8');
   assert.ok(code.length > 0, '构建产物不能为空');
 
-  const { wx, canvas, touchHandlers, storage } = makeWxEnv();
+  const { wx, canvas, touchHandlers, touchEndHandlers, storage } = makeWxEnv();
   let frames = 0;
   const sandbox = {
     wx,
@@ -117,17 +120,14 @@ test('微信小游戏包：在模拟的 wx 环境中可启动并响应触摸', (
 
   // 触摸“开始游戏”按钮（设计坐标 -> 屏幕坐标）
   assert.equal(touchHandlers.length, 1, '应注册触摸监听');
+  assert.ok(touchEndHandlers.length >= 1, '应注册抬起监听（用于区分长按）');
   const playEl = boot.app.ui.find('btn.play');
   assert.ok(playEl, '首页应有开始按钮');
   const scale = 375 / 750;
-  touchHandlers[0]({
-    touches: [
-      {
-        clientX: (playEl.rect.x + playEl.rect.w / 2) * scale,
-        clientY: (playEl.rect.y + playEl.rect.h / 2) * scale,
-      },
-    ],
-  });
+  const playX = (playEl.rect.x + playEl.rect.w / 2) * scale;
+  const playY = (playEl.rect.y + playEl.rect.h / 2) * scale;
+  touchHandlers[0]({ touches: [{ clientX: playX, clientY: playY }] });
+  touchEndHandlers[0]({ changedTouches: [{ clientX: playX, clientY: playY }] });
   assert.equal(boot.app.screen, 'game', '触摸后应进入关卡');
 
   boot.app.update(performance_now(sandbox));
@@ -141,6 +141,7 @@ test('微信小游戏包：在模拟的 wx 环境中可启动并响应触摸', (
   const cx = cellEl.rect.x + cellEl.rect.w / 2;
   const cy = cellEl.rect.y + cellEl.rect.h / 2;
   touchHandlers[0]({ touches: [{ clientX: cx * scale, clientY: cy * scale }] });
+  touchEndHandlers[0]({ changedTouches: [{ clientX: cx * scale, clientY: cy * scale }] });
   boot.app.update(performance_now(sandbox));
   assert.ok(boot.app.game.moves >= 1, '触摸方块应计步');
 

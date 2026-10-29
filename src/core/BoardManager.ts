@@ -69,13 +69,14 @@ export class BoardManager {
     return tile.toggleSwitch();
   }
 
-  /** 旋转指定格子，返回结果（不改变步数，由 GameManager 统计） */
-  rotateAt(x: number, y: number): RotateOutcome {
+  /** 旋转指定格子，dir = 1 顺时针 / -1 逆时针（不改变步数，由 GameManager 统计） */
+  rotateAt(x: number, y: number, dir: 1 | -1 = 1): RotateOutcome {
     if (!this.inBounds(x, y)) return { ok: false, tile: null, reason: 'out-of-bounds' };
     const tile = this.tileAt(x, y);
     if (!tile) return { ok: false, tile: null, reason: 'empty' };
     if (!tile.rotatable) return { ok: false, tile, reason: 'fixed' };
-    tile.rotateCW();
+    if (dir === 1) tile.rotateCW();
+    else tile.rotateCCW();
     return { ok: true, tile };
   }
 

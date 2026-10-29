@@ -84,11 +84,11 @@ export class GameManager {
 
   /**
    * 点击格子：
-   * - 普通方块 -> 顺时针旋转 90°
+   * - 普通方块 -> 旋转 90°（dir = 1 顺时针 / -1 逆时针）
    * - 闸刀开关 -> 切换开/关（同样消耗 1 步）
    * 两种情况都结算步数与胜负。
    */
-  rotate(x: number, y: number): RotateResult {
+  rotate(x: number, y: number, dir: 1 | -1 = 1): RotateResult {
     if (this.isOver) {
       return { ok: false, changed: false, won: this._status === 'won', lost: this._status === 'lost', reason: 'game-over' };
     }
@@ -101,7 +101,7 @@ export class GameManager {
     if (tile.kind === 'switch') {
       this.board.toggleAt(x, y);
     } else {
-      const outcome = this.board.rotateAt(x, y);
+      const outcome = this.board.rotateAt(x, y, dir);
       if (!outcome.ok) {
         this.emit({ type: 'blocked', x, y });
         return { ok: false, changed: false, won: false, lost: false, reason: outcome.reason };
